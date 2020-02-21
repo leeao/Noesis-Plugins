@@ -3,6 +3,7 @@
 #Indexed image untile code by wmltogether  https://github.com/wmltogether/FF12-Texture-Tool/blob/master/GIDecode.py
 #Decode WII CMPR code by Zheneq https://github.com/Zheneq/Noesis-Plugins/blob/master/lib_zq_nintendo_tex.py
 
+
 from inc_noesis import *
 import lib_zq_nintendo_tex as nintex
 
