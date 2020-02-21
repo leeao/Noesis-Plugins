@@ -6,6 +6,7 @@
 # Acknowledgements:
 # http://wiki.tockdom.com - format specs
 
+
 from inc_noesis import *
 import rapi
 
