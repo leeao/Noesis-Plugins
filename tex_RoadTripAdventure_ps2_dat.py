@@ -1,4 +1,5 @@
 ﻿from inc_noesis import *
+
 def registerNoesisTypes():
     handle = noesis.register("Road Trip Adventure PS2 textrues", ".dat")
     noesis.setHandlerTypeCheck(handle, noepyCheckType)
