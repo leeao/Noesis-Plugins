@@ -7,11 +7,6 @@ def registerNoesisTypes():
     return 1
 
 def noepyCheckType(data):
-    bs = NoeBitStream(data)
-    bs.seek(4)
-    ids = bs.readInt()
-    if ids != 0xf :
-	    return 0
     return 1
 
 
@@ -19,7 +14,7 @@ def noepyLoadRGBA(data, texList):
     bs = NoeBitStream(data)
     numTextures = 0
     numSizeType = bs.readInt()
-    ids = bs.readInt()
+    texOfs = bs.readInt() * 16
     for i in range(numSizeType):
         typeNumTex = bs.readUByte()
         bs.readByte()
@@ -27,51 +22,46 @@ def noepyLoadRGBA(data, texList):
         typeSize = bs.readInt() #pixel data size
         numTextures += typeNumTex
     
-    bs.seek(0xF0)
+    bs.seek(texOfs)
     for i in range(numTextures):
-        
         tex = Texture(bs)
         tex.read()
-        nextOfs = bs.tell()
-        
-        texPal = Texture(bs)
-        texPal.read()
-        if  texPal.chunkFlag == 8: #not palette, so the tex is 32bpp
-            bs.seek(nextOfs) # back to next
-            width = tex.width//2
-            height = tex.height//2
-            pixel = parseRgba32(tex.pixel,width,height)
-            textureData = rapi.imageDecodeRaw(pixel,width,height,"r8g8b8a8")
-            texList.append(NoeTexture(rapi.getInputName()+str(i), width,height, textureData, noesis.NOESISTEX_RGBA32))
-            
-        elif texPal.chunkFlag == 0x88:
-            if texPal.colors == 256:
-                texPal.palette = unswizzlePalette(texPal.palette,texPal.colors)
-                pixel = unswizzle8(tex.pixel,tex.width,tex.height)
-                textureData = rapi.imageDecodeRawPal(pixel,texPal.palette,tex.width,tex.height,8,"r8g8b8a8")
-                texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width, tex.height, textureData, noesis.NOESISTEX_RGBA32))
-            elif texPal.colors == 16:
-                palette = bytes()
-                for i in range(16):
-                    palette += rgba32(texPal.palette[i])                
-                
-                pixel = convert4to8(tex.pixel,tex.width,tex.height)
-                textureData = rapi.imageDecodeRawPal(pixel,palette,tex.width,tex.height,8,"r8g8b8a8")
-                texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width, tex.height, textureData, noesis.NOESISTEX_RGBA32)) 
+        if tex.chunkFlag == 8:
+            if tex.isPALImage:
+                texPal = Texture(bs)
+                texPal.read()
+                if texPal.chunkFlag == 0x88:
+                    if texPal.colors == 256:
+                        #print("PAL8")
+                        palette = bytes()
+                        for p in range(256):
+                            palette += rgba32(texPal.palette[p])                           
+                        pixel = rapi.imageUntwiddlePS2(tex.pixel, tex.width, tex.height, 8)
+                        textureData = rapi.imageDecodeRawPal(pixel,palette,tex.width,tex.height,8,"r8g8b8a8", noesis.DECODEFLAG_PS2SHIFT)
+                        texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width, tex.height, textureData, noesis.NOESISTEX_RGBA32))
+                    elif texPal.colors == 16:
+                        #print("PAL4") 
+                        palette = bytes()
+                        for p in range(16):
+                            palette += rgba32(texPal.palette[p])                
+                        
+                        textureData = rapi.imageDecodeRawPal(tex.pixel,palette,tex.width,tex.height,4,"r8g8b8a8")
+                        texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width, tex.height, textureData, noesis.NOESISTEX_RGBA32))
+            elif tex.bpp == 32 :
+                width = tex.width // 2
+                height = tex.height // 2
+                pixel = parseRgba32(tex.pixel,width,height)
+                textureData = rapi.imageDecodeRaw(pixel,width,height,"r8g8b8a8")
+                texList.append(NoeTexture(rapi.getInputName()+str(i), width,height, textureData, noesis.NOESISTEX_RGBA32))
+        elif tex.chunkFlag == 0x20:
+                textureData = rapi.imageDecodeRaw(tex.pixel,tex.width,tex.height,"a8")
+                texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width,tex.height, textureData, noesis.NOESISTEX_RGBA32))
+        elif tex.chunkFlag == 0x40:
+                textureData = rapi.imageDecodeRaw(tex.pixel,tex.width,tex.height,"a4")
+                texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width,tex.height, textureData, noesis.NOESISTEX_RGBA32))
     return 1
 
-def unswizzle8(buf,width,height):
-    out = bytearray(width*height)
-    for y in range(height):
-        for x in range(width):
-            block_location = (y & (~0xf)) * width + (x & (~0xf)) * 2
-            swap_selector = (((y + 2) >> 2) & 0x1) * 4
-            posY = (((y & (~3)) >> 1) + (y & 1)) & 0x7
-            column_location = posY * width * 2 + ((x + swap_selector) & 0x7) * 4
-            byte_num = ((y >> 1) & 1) + ((x >> 2) & 2)
-            swizzleid = block_location + column_location + byte_num
-            out[y * width + x] = buf[swizzleid]
-    return out
+
 class Texture(object):
 
     def __init__(self, bs):
@@ -83,48 +73,66 @@ class Texture(object):
         self.chunkFlag = 0
         self.pixel = bytes()
         self.palette = bytes()
+        self.isPALImage = True
     def read(self):
-        #print(self.bs.tell())
-        rest = self.bs.readByte()        
-        kilos = self.bs.readShort()
+        
+        rest = self.bs.readUByte()        
+        kilos = self.bs.readUShort()
         unk = self.bs.readByte()
         unk2 = self.bs.readShort()
         unk3 = self.bs.readShort()
         unk4 = self.bs.readInt()
         palFlag = self.bs.readByte()
         sizeFlag = self.bs.readByte()
-        chunkFlag = self.bs.readShort()
+        chunkFlag = self.bs.readUByte()
+        unkFlag = self.bs.readByte()
         self.chunkFlag = chunkFlag
         self.bs.seek(112,1)
-        self.width =  2 << ((sizeFlag & 0xf0) >> 4)
-        self.height = 2 << (sizeFlag & 0xf)
-        dataSize = self.width * self.height
-        if dataSize == 64:
-            self.colors = 16
+
+        self.height =  2 << ((sizeFlag & 0xf0) >> 4)
+        self.width = 2 << (sizeFlag & 0xf)
+        if chunkFlag == 0x8:      
+            if self.width > 256:
+                self.isPALImage = False
+                self.bpp = 32
+        if chunkFlag in [0x20,0x40]:
+            self.isPALImage = False
+            self.height =  1 << ((sizeFlag & 0xf0) >> 4)
+            self.width = 1 << (sizeFlag & 0xf)
+        chunkSize = kilos * 1024 + rest * 4
+        dataSize = 0
+        if chunkSize > 0:
+            dataSize = chunkSize - 128
+        if chunkSize == 0:
+            dataSize = self.bs.getSize() - self.bs.tell()
+        if chunkFlag == 0x20:
+            self.bpp = 8
+        elif chunkFlag == 0x40:
             self.bpp = 4
-        elif dataSize == 1024:
-            self.colors = 256
-            self.bpp = 8
-        else:
-            self.bpp = 8
+        
+        if chunkFlag == 0x88:
+            if dataSize == 128:
+                self.colors = 16
+                self.bpp = 4
+            elif dataSize == 1024:
+                self.colors = 256
+                self.bpp = 8
+                
         width = self.width
         height = self.height            
         if chunkFlag == 0x88:
+            #print("get palette buffer")
             colors = []
             for i in range(self.colors):
                 colors.append(self.bs.readUInt())
             self.palette = colors
-            if self.colors < 256:
+            if self.colors == 16:
                 self.bs.seek(64,1)
-        elif chunkFlag == 8:
-            self.pixel = self.bs.readBytes(width*height)
-def convert4to8(buf,width,height):
-    out = bytearray(width*height)
-    for i in range(width*height//2):
-        index = buf[i]
-        out[i*2] = (index >> 4) & 0xf
-        out[i*2+1] = index & 0xf
-    return out
+        if chunkFlag in [0x8,0x20,0x40]:
+            #print("get pixel buffer")
+            self.pixel = self.bs.readBytes(dataSize)
+            
+        #print("dataSize:",dataSize)
 
 def rgba32(rawPixel):
     t = bytearray(4)
@@ -142,39 +150,3 @@ def parseRgba32(buf,width,height):
         outPixel += bytes(rgba32(pixel))
     return outPixel
 
-def unswizzlePalette(colorMap,colors):
-    numBlocks = colors//8
-    palBlock=[]
-    for i in range(0,numBlocks):
-        subBlock=[]                
-        for j in range(8):
-            subBlock.append(colorMap[i*8+j])
-        palBlock.append(subBlock)
-    newPalette = []
-    current = 0
-    swapCount = 2
-    while current < numBlocks :
-        block = palBlock[current]
-        if current == 0:
-            newPalette.append(block)
-            current+=1
-            swapCount = 2
-            continue
-        if swapCount == 2:
-            newPalette.append(palBlock[current+1])
-            newPalette.append(palBlock[current])
-            current+=1
-            swapCount = 0
-        else:
-            newPalette.append(block)
-            swapCount+=1
-        current+=1
-    finalPal = []
-    for i in range(0,numBlocks):
-        subBlock = newPalette[i]
-        for j in range(8):
-            finalPal.append(subBlock[j])
-    palette =bytes()
-    for i in range(colors):
-        palette += rgba32(finalPal[i])
-    return palette
