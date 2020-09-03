@@ -1,13 +1,10 @@
 #by Allen
-
 from inc_noesis import *
 import struct
 def registerNoesisTypes():
 	handle = noesis.register("Evil Dead Regeneration PC pak model texture", ".pak")
 	noesis.setHandlerTypeCheck(handle, noepyCheckType)
 	noesis.setHandlerLoadModel(handle, pakLoadModel)
-	#noesis.setTypeSharedModelFlags(handle, noesis.NMSHAREDFL_FLATWEIGHTS)
-	#noesis.logPopup()
 	return 1
 def noepyCheckType(data):
         bs = NoeBitStream(data)
@@ -16,7 +13,7 @@ def noepyCheckType(data):
         if idstring != "XXXX":
                 return 0
         return 1
-        
+
 def pakLoadModel(data, mdlList):
         bs = NoeBitStream(data)	
         ctx = rapi.rpgCreateContext()        
@@ -31,14 +28,15 @@ def pakLoadModel(data, mdlList):
                 if chunkName =="2pr.":
                         chunkEndOfs += chunkSize
                         break
+        texList = []
         bs.seek(0x50)
         while (bs.tell()<chunkEndOfs):
                 chunk=rwChunk(bs)
                 if chunk.chunkID == 0x16:
                         rtex = rTex(bs.readBytes(chunk.chunkSize))
-                        rtex.rTexList()                
+                        rtex.rTexList()
+                        texList = rtex.texList
                 elif chunk.chunkID == 0x10:
-                        #print("found Clump")
                         clumpEndOfs = bs.tell()+chunk.chunkSize                      
                         clumpStructHeader = rClumpStruct(bs)
                         
@@ -46,9 +44,7 @@ def pakLoadModel(data, mdlList):
                         datas = bs.readBytes(framtListHeader.chunkSize)
                         frameList = rFrameList(datas)
                         bones = frameList.readBoneList()
-                        #skinBones = frameList.getSkinBones()
-                        boneRemap = remapBoneIndex(frameList)
-                        skinBones = boneRemap.getBones()
+                        skinBones = frameList.getSkinBones()
                         geometryListHeader = rwChunk(bs)
                         geometryListStructHeader = rwChunk(bs)
                         geometryCount = bs.readUInt()
@@ -65,16 +61,16 @@ def pakLoadModel(data, mdlList):
                                         vertMatList[atomicList[j].geometryIndex]= bones[atomicList[j].frameIndex].getMatrix()
                         if geometryCount:
                                 geometryList = rGeometryList(datas,geometryCount,vertMatList)
-                                '''                         
-                                modelList=geometryList.readGeometry()
-                                for i in range(len(modelList)):
-                                        mdlList.append(modelList[i])
-                                '''
-                                #rapi.rpgSetBoneMap(frameList.boneIDList)
                                 geometryList.readGeometry()                                
                                 mdl = rapi.rpgConstructModel()
+                                matList = []
+                                for tex in texList:
+                                        matName = tex.name
+                                        material = NoeMaterial(matName, tex.name)
+                                        material.setDefaultBlend(0)
+                                        matList.append(material)
+                                mdl.setModelMaterials(NoeModelMaterials(texList,matList))
                                 mdl.setBones(skinBones)
-                                #mdl.setBones(bones)
                                 mdlList.append(mdl)
                                 rapi.rpgReset()
                                 
@@ -120,30 +116,25 @@ class rTexNative(object):
                         palette = self.bs.readBytes(64) #16 colors
                         self.bs.seek(64,1)#skip padding
                 pixelBuff = self.bs.readBytes(pixelBuffSize)
-                if texFormat == 0x600:
-                        if texFormatExt == 0x8000:
-                                if compressed==1:
-                                        texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT1)
-                                else:
-                                        texData = rapi.imageDecodeRaw(pixelBuff, width, height, "p8r8g8b8")
-                        elif texFormatExt == 0x2000:
-                                texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")
-                        elif texFormatExt == 0x4000:
-                                texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")
-                                
-                elif texFormat == 0x500:
-                        if texFormatExt == 0x2000:
-                                texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")
-                        elif texFormatExt == 0x4000:
-                                texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")
-                        else:
+
+                if depth == 32:
+                        if compressed == 1:
+                                texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT1)
+                        elif compressed == 0:
+                                pixelBuff = rapi.imageFromMortonOrder(pixelBuff,width,height)
                                 texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8a8")
+                elif depth == 8:
+                        pixelBuff = rapi.imageFromMortonOrder(pixelBuff,width,height)
+                        texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")
+                        
+                elif depth == 4:
+                        texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 4, "r8g8b8a8")
                 
                 
                 dirName = rapi.getDirForFilePath(rapi.getInputName())
                 outName = dirName + texName + ".png"
                 texture = NoeTexture(texName, width, height, texData, noesis.NOESISTEX_RGBA32)
-                noesis.saveImageRGBA(outName,texture)
+                #noesis.saveImageRGBA(outName,texture)
                 return texture
 class rTex(object):
         def __init__(self,datas):
@@ -161,68 +152,7 @@ class rTex(object):
                         texNative = rTexNative(datas)
                         texture = texNative.rTexture()
                         self.texList.append(texture)
-class remapBoneIndex(object):                
-        def __init__(self,frameList):
-                self.frameList = frameList
-                self.subBones = []
-                self.parentBones = []
-                self.parentIdList=[]
-                self.numParentID = 0
-                self.newBoneMap = []
-                self.newBones=[]
-        def getOldBoneMap(self):
-                for i in range(len(self.frameList.bonePrtIdList)):
-                        for j in range(len(self.frameList.bonePrtIdList)):
-                                if self.frameList.bonePrtIdList[j] == i:
-                                        self.numParentID += 1
-                                        parentBoneName = self.frameList.bones[i].name + "___"+str(i)
-                                        self.parentBones.append(parentBoneName)
-                                        self.parentIdList.append(i)                                                  
-                                        break                                
-                for i in range( self.numParentID):
-                        sub_bones = []
-                        for j in range(len( self.frameList.bones)):
-                                if  self.frameList.bonePrtIdList[j]== self.parentIdList[i]:
-                                        subBoneName = self.frameList.bones[j].name+"___"+str(j)
-                                        sub_bones.append(subBoneName)                 
-                        self.subBones.append(sub_bones)            
-        def getNewBoneMap(self,boneNameInfo):
-                boneID = int(boneNameInfo.split('___',1)[1])
-                boneName = boneNameInfo.split('___',1)[0]
-                self.newBoneMap.append(boneNameInfo)
-                subArrayIndex = -1
-                for j in range(self.numParentID):
-                        if boneNameInfo==self.parentBones[j]:
-                                subArrayIndex = j
-                                break
-                if subArrayIndex>-1:
-                        sub_bones = self.subBones[subArrayIndex]
-                        for j in range(len(sub_bones)):
-                                self.getNewBoneMap(sub_bones[j])
-        def getBones(self):
-                self.getOldBoneMap()
-                self.getNewBoneMap(self.parentBones[0])#self.parentBones[0] is root bone(dummy)
-                for i in range(len(self.newBoneMap)):
-                        oldBoneInfo = self.newBoneMap[i]
-                        oldBoneID = int(oldBoneInfo.split('___',1)[1])
-                        oldBoneName = oldBoneInfo.split('___',1)[0]
-                        #remove root bone (dummy) unused for skin. start index at 1.
-                        if oldBoneID:                                
-                                boneIndex = i-1
-                                boneName = self.frameList.bones[oldBoneID].name
-                                boneMat = self.frameList.bones[oldBoneID].getMatrix()
-                                OldParentID = self.frameList.bonePrtIdList[oldBoneID]
-                                bonePIndex = None
-                                for j in range(len(self.newBoneMap)):                                
-                                        tempOldBoneID = int(self.newBoneMap[j].split('___',1)[1])
-                                        if tempOldBoneID == OldParentID:
-                                                bonePIndex = j-1
-                                                break
-                                if oldBoneID == 0:
-                                      bonePIndex = -1  
-                                bone = NoeBone(boneIndex, boneName, boneMat, None, bonePIndex)
-                                self.newBones.append(bone)
-                return self.newBones                    
+       
 class rClumpStruct(object):
         def __init__(self,bs):
                 self.chunkID,self.chunkSize,self.chunkVersion = struct.unpack("3I", bs.readBytes(12))                
@@ -242,14 +172,15 @@ class rFrameList(object):
                 self.hAnimBoneIndexList=[]                
                 self.bones = []
                 self.skinBones=[]
-                self.hasAnim = 0                
+                self.hasAnim = 0
+                self.kickDummy = 0
         def rFrameListStruct(self):
                 header = rwChunk(self.bs)
                 frameCount = self.bs.readUInt()
                 self.frameCount = frameCount
                 if frameCount:
                         for i in range(frameCount):
-                                boneMat = NoeMat43.fromBytes(self.bs.readBytes(48))
+                                boneMat = NoeMat43.fromBytes(self.bs.readBytes(48)).transpose()
                                 bonePrtId = self.bs.readInt()
                                 self.bs.readInt()
                                 self.boneMatList.append(boneMat)
@@ -302,6 +233,7 @@ class rFrameList(object):
         def rFrameExtList(self):
                 for i in range(self.frameCount):
                         self.rFrameExt(i)
+        
         def readBoneList(self):
                 self.rFrameListStruct()
                 self.rFrameExtList()
@@ -313,7 +245,7 @@ class rFrameList(object):
                         bonePIndex = self.bonePrtIdList[i]
                         bone = NoeBone(boneIndex, boneName, boneMat, None, bonePIndex)
                         bones.append(bone)
-                        #print("BoneParentID:\t"+str(bonePIndex))
+                        
                 for i in range(self.frameCount):
                         bonePIndex = self.bonePrtIdList[i]
                         if(bonePIndex>-1):
@@ -322,6 +254,7 @@ class rFrameList(object):
                                 bones[i].setMatrix(boneMat * prtMat)
                 self.bones = bones
                 return bones
+        
         def getSkinBones(self):
                 oldBoneIndexList = [0]*(self.frameCount-1)
                 oldBonePrtIDlist =[0]*(self.frameCount-1)
@@ -346,7 +279,6 @@ class rFrameList(object):
                         bonePIndex = newBonePrtIdList[j]
                         bone = NoeBone(boneIndex, boneName, boneMat, None,bonePIndex)
                         bones.append(bone)
-                #print("start")
                 for j in range(self.frameCount-1):
                         bonePIndex = newBonePrtIdList[j]
                         if(bonePIndex>-1):
@@ -357,7 +289,6 @@ class rFrameList(object):
                                 prtMat=self.bones[0].getMatrix()
                                 boneMat = bones[j].getMatrix()                             
                                 bones[j].setMatrix(boneMat * prtMat)
-                        #print(str(j)+"\t"+bones[j].name+"\t"+str(bonePIndex))
                 self.skinBones = bones
                 
                 return bones
@@ -431,24 +362,27 @@ class rMaterialList(object):
                         material.setDefaultBlend(0)
                         self.matList.append(material)
                         #texture = NoeTexture()
-                        self.texList.append(texName)
+                        self.texList.append(texName)                        
                 #return self.matList
 class rGeometryList(object):
         def __init__(self,datas,geometryCount,vertMatList):
                 self.bs = NoeBitStream(datas)            
                 self.geometryCount = geometryCount
                 self.vertMatList = vertMatList
+                self.matList =[]
         def readGeometry(self):
-                mlist=[]
+                
                 for i in range(self.geometryCount):
                         vertMat = self.vertMatList[i]
                         geometryHeader = rwChunk(self.bs)
                         datas = self.bs.readBytes(geometryHeader.chunkSize)
                         geo = rGeomtry(datas,vertMat)
-                        #mdl = geo.rGeometryStruct()
-                        geo.rGeometryStruct()                        
-                        #mlist.append(mdl)
-                #return  mlist              
+                        
+                        geo.rGeometryStruct()
+                        for m in range(len(geo.matList)):
+                                self.matList.append(geo.matList[m])
+                        
+                             
 class rSkin(object):
         def __init__(self,datas,numVert,nativeFlag):
                 self.bs = NoeBitStream(datas)
@@ -478,13 +412,13 @@ class rSkin(object):
                         usedBoneCount = 0
                         for i in range(256):
                                 boneIndex = self.bs.readInt()
-                                if boneIndex:
+                                if boneIndex > 0:
                                         boneIndexList1.append(boneIndex)
                                         usedBoneCount += 1
-                        for i in range(usedBoneCount+1):
+                        for i in range(boneCount):
                                 boneIndex = self.bs.readInt()
                                 boneIndexList2.append(boneIndex)
-                        self.bs.seek((256-(usedBoneCount+1))*4,1)
+                        self.bs.seek((256-boneCount)*4,NOESEEK_REL)                        
                         unknown_type = self.bs.readInt()
                         maxWeightsPerVertex = self.bs.readInt()
                         unk1 = self.bs.readInt()
@@ -496,9 +430,11 @@ class rSkin(object):
                                         weight = self.bs.readUByte()/255.0
                                         wbytes = struct.pack('f',weight)
                                         skinBoneWeights += wbytes
-                                skinBoneIndexs+= self.bs.readBytes(maxWeightsPerVertex*2)
-                        #rapi.rpgBindBoneIndexBuffer(skinBoneIndexs, noesis.RPGEODATA_USHORT, maxWeightsPerVertex*2 , maxWeightsPerVertex)
-                        #rapi.rpgBindBoneWeightBuffer(skinBoneWeights, noesis.RPGEODATA_FLOAT, maxWeightsPerVertex*4, maxWeightsPerVertex)
+                                for j in range(maxWeightsPerVertex):
+                                        boneID = boneIndexList1[self.bs.readUShort() // 3]
+                                        skinBoneIndexs += struct.pack('i',boneID)                                
+                        rapi.rpgBindBoneIndexBuffer(skinBoneIndexs, noesis.RPGEODATA_INT, maxWeightsPerVertex*4 , maxWeightsPerVertex)
+                        rapi.rpgBindBoneWeightBuffer(skinBoneWeights, noesis.RPGEODATA_FLOAT, maxWeightsPerVertex*4, maxWeightsPerVertex)
                                 
                 inverseBoneMats=[]
                 for i in range(boneCount):
@@ -591,6 +527,7 @@ class rGeomtry(object):
         def __init__(self,datas,vertMat):
                 self.bs = NoeBitStream(datas)
                 self.vertMat = vertMat
+                self.matList = []
         def rGeometryStruct(self):
                 geoStruct = rwChunk(self.bs)
                 FormatFlags = self.bs.readUShort()
@@ -652,7 +589,7 @@ class rGeomtry(object):
                                         normBuff+=normal.toBytes()        
                                         rapi.rpgBindNormalBuffer(normBuff, noesis.RPGEODATA_FLOAT, 12)
                                                 
-                #mdl = rapi.rpgConstructModel()
+                
 
                 matrialListHeader = rwChunk(self.bs)
                 matDatas = self.bs.readBytes(matrialListHeader.chunkSize)
@@ -660,11 +597,12 @@ class rGeomtry(object):
                 rMatList.getMaterial()
                 matList = rMatList.matList
                 texList = rMatList.texList
+                for m in range(len(matList)):
+                        self.matList.append(matList[m])
                 geoExtHeader = rwChunk(self.bs)
                 #geoExtDatas = self.bs.readBytes(geoExtHeader.chunkSize)
                 geoExtEndOfs = self.bs.tell()+geoExtHeader.chunkSize
-                #skinDatas = None
-                #binMeshDatas = None
+
                 haveSkin = 0
                 haveBinMesh = 0
                 haveNavtiveMesh = 0
@@ -694,7 +632,4 @@ class rGeomtry(object):
                         nativeDataPLG.readMesh()
                 #rapi.rpgCommitTriangles(faceBuff, noesis.RPGEODATA_USHORT, (numFace * 3), noesis.RPGEO_TRIANGLE, 1)
                 rapi.rpgClearBufferBinds()                
-                #mdl = rapi.rpgConstructModel()
-                #mdl.setModelMaterials(NoeModelMaterials([], matList))
-                #rapi.rpgReset()
-                #return mdl
+
