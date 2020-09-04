@@ -21,9 +21,10 @@ def noepyLoadRGBA(data, texList):
         bs.readShort()
         typeSize = bs.readInt() #pixel data size
         numTextures += typeNumTex
-    
+    #print(numTextures)
     bs.seek(texOfs)
-    for i in range(numTextures):
+    #for i in range(numTextures):
+    while(bs.tell()<bs.getSize()):
         tex = Texture(bs)
         tex.read()
         if tex.chunkFlag == 8:
@@ -53,10 +54,10 @@ def noepyLoadRGBA(data, texList):
                 pixel = parseRgba32(tex.pixel,width,height)
                 textureData = rapi.imageDecodeRaw(pixel,width,height,"r8g8b8a8")
                 texList.append(NoeTexture(rapi.getInputName()+str(i), width,height, textureData, noesis.NOESISTEX_RGBA32))
-        elif tex.chunkFlag == 0x20:
+        elif tex.chunkFlag & 0x20 == 0x20:
                 textureData = rapi.imageDecodeRaw(tex.pixel,tex.width,tex.height,"a8")
                 texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width,tex.height, textureData, noesis.NOESISTEX_RGBA32))
-        elif tex.chunkFlag == 0x40:
+        elif tex.chunkFlag & 0x40 == 0x40:
                 textureData = rapi.imageDecodeRaw(tex.pixel,tex.width,tex.height,"a4")
                 texList.append(NoeTexture(rapi.getInputName()+str(i), tex.width,tex.height, textureData, noesis.NOESISTEX_RGBA32))
     return 1
@@ -95,7 +96,7 @@ class Texture(object):
             if self.width > 256:
                 self.isPALImage = False
                 self.bpp = 32
-        if chunkFlag in [0x20,0x40]:
+        if chunkFlag & 0x20 == 0x20 or chunkFlag & 0x40 == 0x40 :
             self.isPALImage = False
             self.height =  1 << ((sizeFlag & 0xf0) >> 4)
             self.width = 1 << (sizeFlag & 0xf)
@@ -128,7 +129,7 @@ class Texture(object):
             self.palette = colors
             if self.colors == 16:
                 self.bs.seek(64,1)
-        if chunkFlag in [0x8,0x20,0x40]:
+        else:
             #print("get pixel buffer")
             self.pixel = self.bs.readBytes(dataSize)
             
