@@ -415,7 +415,7 @@ def createTriList(flagData):
 
         if filpFlag == 0x20:
             faceDir = -1
-        elif bitflag == 0:
+        elif filpFlag == 0:
             faceDir = 1
         if skipFlag != 0x80:
             if faceDir > 0:
