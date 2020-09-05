@@ -73,7 +73,7 @@ def hpmLoadModel(data, mdlList):
             bs.seek(16,NOESEEK_REL)# 4 floats
             bs.seek(20,NOESEEK_REL)
             subMeshInfo = []
-            subMeshInfo.append(numTypeBlock)
+            subMeshInfo.append(meshType)
             subMeshInfo.append(numUnk)
             subMeshInfo.append(numUnk2)
             subMeshInfo.append(numVert)
