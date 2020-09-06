@@ -492,6 +492,11 @@ def readBone(bs,boneIndex):
         name2 = readFixedString(bs,35)        
     elif dataType == 5:
         unk = bs.readInt()
+    elif dataType == 8:
+        unk1 = bs.readInt()
+        numFloat = bs.readInt()
+        for f in range(numFloat):            
+            unk3f = bs.read('3f')	
     bone = NoeBone(skinBoneID, boneName, boneMatrix, None,-1)
     boneInfo.append(bone)
     subBones.append(siblingID)
