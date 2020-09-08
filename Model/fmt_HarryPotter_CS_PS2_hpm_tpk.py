@@ -4,7 +4,10 @@ import os
 def registerNoesisTypes():
     handle = noesis.register("Harry Potter And The Chamber Of Secrets PS2 .tpk textures", ".tpk")
     noesis.setHandlerTypeCheck(handle, tpkNoepyCheckType)
-    noesis.setHandlerLoadRGBA(handle, noepyLoadRGBA)
+    noesis.setHandlerLoadRGBA(handle, tpkNoepyLoadRGBA)
+    handle = noesis.register("Harry Potter And The Chamber Of Secrets PS2 .ssh textures", ".ssh")
+    noesis.setHandlerTypeCheck(handle, sshNoepyCheckType)
+    noesis.setHandlerLoadRGBA(handle, sshNoepyLoadRGBA)    
     handle = noesis.register("Harry Potter And The Chamber Of Secrets PS2 .hpm model", ".hpm")
     noesis.setHandlerTypeCheck(handle, hpmNoepyCheckType)
     noesis.setHandlerLoadModel(handle, hpmLoadModel)    
@@ -14,6 +17,12 @@ def tpkNoepyCheckType(data):
     bs = NoeBitStream(data)
     idstring = noeStrFromBytes(bs.readBytes(4))
     if idstring != "BIGF":
+	    return 0
+    return 1
+def sshNoepyCheckType(data):
+    bs = NoeBitStream(data)
+    idstring = noeStrFromBytes(bs.readBytes(4))
+    if idstring != "SHPS":
 	    return 0
     return 1
 def hpmNoepyCheckType(data):
@@ -39,13 +48,14 @@ def hpmLoadModel(data, mdlList):
         matInfo = readMatTexName(bs)
         texNames.append(rapi.getExtensionlessName(rapi.getLocalFileName(matInfo[0])))
         mat = NoeMaterial(texNames[i],texNames[i]+".png")
-        #if matInfo[1] in [0,1,2]:
-        #    mat.setFlags(noesis.NMATFLAG_TWOSIDED)       
+        if matInfo[1] in [0,1,2]:
+            mat.setFlags(noesis.NMATFLAG_TWOSIDED)       
         matList.append(mat)
     meshOffsetList = []
     meshMatIDList = []
     meshMatSkinBoneOfsList = []
     meshMatSubMeshInfo = []
+    meshNames = []
     for i in range(numMesh):
         #print("curofs:",bs.tell())
         numMat = bs.readShort()
@@ -53,7 +63,7 @@ def hpmLoadModel(data, mdlList):
         boundBoxMin = NoeVec3.fromBytes(bs.readBytes(12))
         boundBoxMax = NoeVec3.fromBytes(bs.readBytes(12))
         meshName = readHpmString(bs)
-        
+        meshNames.append(meshName)
         matIDList = []
         for j in range(numMat):
             matIDList.append(bs.readInt())
@@ -84,12 +94,12 @@ def hpmLoadModel(data, mdlList):
             skinBoneIDOfs = bs.readInt()
             matSkinBoneOfsList.append(skinBoneIDOfs)
             offsetList = []
-            if numType2:
+            if numType2 > 0:
                 for n in range(numType2):
                     offset = bs.readInt()
                     size = bs.readInt()
                     offsetList.append([offset,size])
-            if numType1:
+            if numType1 > 0:
                 for n in range(numType1):
                     offset = bs.readInt()
                     size = bs.readInt()
@@ -99,7 +109,7 @@ def hpmLoadModel(data, mdlList):
                     if numType2:
                         numData = bs.readInt()
                         bs.seek(numData*4,NOESEEK_REL)
-            if numType3:
+            if numType3 > 0:
                 bs.seek(32,NOESEEK_REL)
 
             matOffsetList.append(offsetList)
@@ -133,6 +143,7 @@ def hpmLoadModel(data, mdlList):
         skinBones.append(bones[i])
     for i in range(numBones):
         skinBones[boneSkinIDs[i]] = bones[i]
+    
     #find parent
     for i in range(numBones):
         for b in range(numBones):
@@ -151,6 +162,7 @@ def hpmLoadModel(data, mdlList):
     for i in range(numBones):
         if bones[i].parentIndex != -1:
             bones[i].setMatrix(bones[i].getMatrix()*skinBones[bones[i].parentIndex].getMatrix())
+    
     for i in range(numMesh):
         
         matOffsetList = meshOffsetList[i]
@@ -158,8 +170,6 @@ def hpmLoadModel(data, mdlList):
         matSkinBoneOfsList = meshMatSkinBoneOfsList[i]
         matSubMeshInfo = meshMatSubMeshInfo[i]
         numMat = len(matIDList)
-        numVert = 0
-        numFace = 0
         for j in range(numMat):
             offsetList = matOffsetList[j]
             skinBoneOfs = matSkinBoneOfsList[j]
@@ -181,87 +191,200 @@ def hpmLoadModel(data, mdlList):
                     skinUsedBoneIDs.append(boneID)
             parentBone = None
             parentBoneID = None
+            parentBoneListID = None
+            boneHaveSubMesh = False
             for b in range(numBones):
                 if len(boneInfoList[b][2]):
                     boneChildMeshID = boneInfoList[b][2][0]
                     if boneChildMeshID == i:
                         parentBone = bones[b]
                         parentBoneID = bones[b].index
+                        parentBoneListID = b
+                        boneHaveSubMesh = boneInfoList[b][4]
                         continue            
-    
+            
+            if boneHaveSubMesh == False:
+                for o in range(len(offsetList)):
+                    
+                    #print("vertex:0x%x size:%d"%(16+offsetList[o][0],16+offsetList[o][1]))
+                    
+                    bs.seek(16+offsetList[o][0])
+                    vifData =  bs.readBytes(offsetList[o][1])
+                    unpackData = rapi.unpackPS2VIF(vifData)
+                    
+                    for up in unpackData:
+                        if up.numElems == 3 and up.elemBits == 32:
+                                vertDatas.append(up.data)
+                        elif up.numElems == 1 and up.elemBits == 8 :
+                                triData = createTriList(up.data)
+                                faceDatas.append(triData)                            
+                        
+                        elif up.numElems == 3 and up.elemBits == 8:
+                                normals = getNormal(up.data)
+                                normalDatas.append(normals)
+                        
+                        elif up.numElems == 2 and up.elemBits == 16:
+                                newUVData = getUV(up.data)
+                                UVDatas.append(newUVData)
+                                
+                        elif up.numElems == 4 and up.elemBits == 16:
+                                vertSkinData = getVertexSkinBoneWeight(up.data,skinUsedBoneIDs)
+                                boneIDBuffer = vertSkinData[0]
+                                weightBuffer = vertSkinData[1]
+                                skinBoneIDs.append(boneIDBuffer)
+                                skinWeights.append(weightBuffer)
+                        
+                        elif up.numElems == 4 and up.elemBits == 8:
+                                cin = NoeBitStream(up.data)
+                                colorData = bytes()                            
+                                for c in range(len(up.data) // 4):
+                                    colorData += rgba32(cin.readUInt())
+                                colorDatas.append(colorData)
+                                        
+                numVertBlock = len(vertDatas)
+                for v in range(numVertBlock):
+                    
+                    vertBuffer = vertDatas[v]
+                    if parentBone != None:
+                        vertBuffer = getVertex(vertBuffer,parentBone.getMatrix())
+                        if len(skinBoneIDs) == 0:
+                            vertSkinData = getSkinSingleBoneWeight(len(vertBuffer)//12,parentBoneID)
+                            rapi.rpgBindBoneIndexBuffer(vertSkinData[0], noesis.RPGEODATA_INT, 4, 1)
+                            rapi.rpgBindBoneWeightBuffer(vertSkinData[1], noesis.RPGEODATA_FLOAT, 4, 1)                        
+                    rapi.rpgBindPositionBuffer(vertBuffer, noesis.RPGEODATA_FLOAT, 12)
+                    
+                    UVData = UVDatas[v]
+                    rapi.rpgBindUV1Buffer(UVData, noesis.RPGEODATA_FLOAT, 8)
+                    if len(normalDatas):
+                        normalData = normalDatas[v]
+                        if parentBone != None:
+                            normalData = getTransformNormal(normalData,parentBone.getMatrix())
+                        rapi.rpgBindNormalBuffer(normalData, noesis.RPGEODATA_FLOAT, 12)
+                    
+                    if len(skinBoneIDs):
+                        boneIDs = skinBoneIDs[v]
+                        weights = skinWeights[v]
+                        rapi.rpgBindBoneIndexBuffer(boneIDs, noesis.RPGEODATA_INT, 16, 4)
+                        rapi.rpgBindBoneWeightBuffer(weights, noesis.RPGEODATA_FLOAT, 16, 4)
+                    if len(colorDatas):
+                        colorData = colorDatas[v]                
+                        rapi.rpgBindColorBuffer(colorData, noesis.RPGEODATA_UBYTE, 4, 4)
+                    faceBuffer = faceDatas[v]
+                    materialTexName = texNames[matIDList[j]]
+                    rapi.rpgSetMaterial(materialTexName)
+                    rapi.rpgCommitTriangles(faceBuffer, noesis.RPGEODATA_INT, (len(faceBuffer))//4, noesis.RPGEO_TRIANGLE, 1)
+                    rapi.rpgClearBufferBinds()            
+        rapi.rpgSetName(meshNames[i])
+    for i in range(numBones):
+        boneHaveSubMesh = boneInfoList[i][4]
+        if boneHaveSubMesh:
+            boneMeshOffsetList = boneInfoList[i][5]
+            lightMatID = boneInfoList[i][6][0]
+            boneMeshType = boneInfoList[i][8][0]
+            parentBone = bones[boneInfoList[i][7][0]]
+            parentBoneID = parentBone.index
+            boneChildMeshID = boneInfoList[i][2][0]
+            matIDList = meshMatIDList[boneChildMeshID]
+            
+            for j in range(len(boneMeshOffsetList)):
+                matID = matIDList[j]
+                lightMatID = lightMatID
+                offsetList = boneMeshOffsetList[j]
+                vertDatas = []
+                faceDatas = []
+                UVDatas =[]
+                normalDatas = []
+                skinBoneIDs = []
+                skinWeights = []
+                colorDatas = []
+                skinUsedBoneIDs = []
+            
+                UV1Datas = []
+                matMeshOffsetList = meshOffsetList[boneChildMeshID][j]
+                for o in range(len(matMeshOffsetList)):
+                    
+                    bs.seek(16+matMeshOffsetList[o][0])
+                    
+                    vifData =  bs.readBytes(matMeshOffsetList[o][1])
+                    unpackData = rapi.unpackPS2VIF(vifData)
+                    
+                    for up in unpackData:                        
+                        if up.numElems == 2 and up.elemBits == 16:
+                                newUVData = getUV(up.data)
+                                UV1Datas.append(newUVData)
+             
+                for o in range(len(offsetList)):
+                    
+                    bs.seek(16+offsetList[o][0])
+                    
+                    vifData =  bs.readBytes(offsetList[o][1])
+                    unpackData = rapi.unpackPS2VIF(vifData)
+                    
+                    for up in unpackData:
+                        if up.numElems == 3 and up.elemBits == 32:
+                                vertDatas.append(up.data)
+                        elif up.numElems == 1 and up.elemBits == 8 :
+                                triData = createTriList(up.data)
+                                faceDatas.append(triData)                            
+                        
+                        elif up.numElems == 3 and up.elemBits == 8:
+                                normals = getNormal(up.data)
+                                normalDatas.append(normals)
+                        
+                        elif up.numElems == 2 and up.elemBits == 16:
+                                newUVData = getUV(up.data)
+                                UVDatas.append(newUVData)
 
-            for o in range(len(offsetList)):
-                
-                bs.seek(16+offsetList[o][0])
-                
-                vifData =  bs.readBytes(offsetList[o][1])
-                unpackData = rapi.unpackPS2VIF(vifData)
-                
-                for up in unpackData:
-                    if up.numElems == 3 and up.elemBits == 32:
-                            vertDatas.append(up.data)
-                    elif up.numElems == 1 and up.elemBits == 8 :
-                            triData = createTriList(up.data)
-                            faceDatas.append(triData)                            
+                        
+                        elif up.numElems == 4 and up.elemBits == 8:
+                                cin = NoeBitStream(up.data)
+                                colorData = bytes()                            
+                                for c in range(len(up.data) // 4):
+                                    colorData += rgba32(cin.readUInt())
+                                colorDatas.append(colorData)
+                                
+                numVertBlock = len(vertDatas)
+                for v in range(numVertBlock):
                     
-                    elif up.numElems == 3 and up.elemBits == 8:
-                            normals = getNormal(up.data)
-                            normalDatas.append(normals)
-                    
-                    elif up.numElems == 2 and up.elemBits == 16:
-                            newUVData = getUV(up.data)
-                            UVDatas.append(newUVData)
-                            
-                    elif up.numElems == 4 and up.elemBits == 16:
-                            vertSkinData = getVertexSkinBoneWeight(up.data,skinUsedBoneIDs)
-                            boneIDBuffer = vertSkinData[0]
-                            weightBuffer = vertSkinData[1]
-                            skinBoneIDs.append(boneIDBuffer)
-                            skinWeights.append(weightBuffer)
-                    
-                    elif up.numElems == 4 and up.elemBits == 8:
-                            cin = NoeBitStream(up.data)
-                            colorData = bytes()                            
-                            for c in range(len(up.data) // 4):
-                                colorData += rgba32(cin.readUInt())
-                            colorDatas.append(colorData)
-                            
-            numVertBlock = len(vertDatas)
-            for v in range(numVertBlock):
-                
-                vertBuffer = vertDatas[v]
-                if parentBone != None:
-                    vertBuffer = getVertex(vertBuffer,parentBone.getMatrix())
-                    if len(skinBoneIDs) == 0:
-                        vertSkinData = getSkinSingleBoneWeight(len(vertBuffer)//12,parentBoneID)
-                        rapi.rpgBindBoneIndexBuffer(vertSkinData[0], noesis.RPGEODATA_INT, 4, 1)
-                        rapi.rpgBindBoneWeightBuffer(vertSkinData[1], noesis.RPGEODATA_FLOAT, 4, 1)                        
-                rapi.rpgBindPositionBuffer(vertBuffer, noesis.RPGEODATA_FLOAT, 12)
-                
-                UVData = UVDatas[v]
-                rapi.rpgBindUV1Buffer(UVData, noesis.RPGEODATA_FLOAT, 8)
-                if len(skinBoneIDs):
-                    boneIDs = skinBoneIDs[v]
-                    weights = skinWeights[v]
-                    rapi.rpgBindBoneIndexBuffer(boneIDs, noesis.RPGEODATA_INT, 16, 4)
-                    rapi.rpgBindBoneWeightBuffer(weights, noesis.RPGEODATA_FLOAT, 16, 4)
-                if len(colorDatas):
-                    colorData = colorDatas[v]                
-                    rapi.rpgBindColorBuffer(colorData, noesis.RPGEODATA_UBYTE, 4, 4)
-                faceBuffer = faceDatas[v]
-                materialTexName = texNames[matIDList[j]]
-                rapi.rpgSetMaterial(materialTexName)
-                rapi.rpgCommitTriangles(faceBuffer, noesis.RPGEODATA_INT, (len(faceBuffer))//4, noesis.RPGEO_TRIANGLE, 1)
-                rapi.rpgClearBufferBinds()
-                numVert += len(vertBuffer)//12
-                numFace += len(faceBuffer)//12
-        #print(numVert,numFace)
-    rapi.rpgOptimize()
-    rapi.rpgSmoothNormals()
+                    vertBuffer = vertDatas[v]
+                    if parentBone != None:
+                        vertBuffer = getVertex(vertBuffer,parentBone.getMatrix())
+                        if len(skinBoneIDs) == 0:
+                            vertSkinData = getSkinSingleBoneWeight(len(vertBuffer)//12,parentBoneID)
+                            rapi.rpgBindBoneIndexBuffer(vertSkinData[0], noesis.RPGEODATA_INT, 4, 1)
+                            rapi.rpgBindBoneWeightBuffer(vertSkinData[1], noesis.RPGEODATA_FLOAT, 4, 1)                        
+                    rapi.rpgBindPositionBuffer(vertBuffer, noesis.RPGEODATA_FLOAT, 12)
+
+                    if len(normalDatas):
+                        normalData = normalDatas[v]
+                        if parentBone != None:
+                            normalData = getTransformNormal(normalData,parentBone.getMatrix())
+                        rapi.rpgBindNormalBuffer(normalData, noesis.RPGEODATA_FLOAT, 12)
+                        
+                    UV1Data = UV1Datas[v]
+                    rapi.rpgBindUV1Buffer(UV1Data, noesis.RPGEODATA_FLOAT, 8)                    
+                    UVData = UVDatas[v]
+                    rapi.rpgBindUV2Buffer(UVData, noesis.RPGEODATA_FLOAT, 8)
+
+                    if len(colorDatas):
+                        colorData = colorDatas[v]                
+                        rapi.rpgBindColorBuffer(colorData, noesis.RPGEODATA_UBYTE, 4, 4)
+                    faceBuffer = faceDatas[v]
+                    materialTexName = texNames[matID]
+                    rapi.rpgSetMaterial(materialTexName)
+                    rapi.rpgSetLightmap(texNames[lightMatID])
+                    rapi.rpgCommitTriangles(faceBuffer, noesis.RPGEODATA_INT, (len(faceBuffer))//4, noesis.RPGEO_TRIANGLE, 1)
+                    rapi.rpgClearBufferBinds()                    
+            rapi.rpgSetName(meshNames[boneChildMeshID])    
+
+    
+    #rapi.rpgOptimize()
+    #rapi.rpgSmoothNormals()
     mdl = rapi.rpgConstructModel()    
     mdl.setModelMaterials(NoeModelMaterials(None,matList))
     mdl.setBones(bones)
     mdlList.append(mdl)
+    
     return 1
 def readHpmString(bs):
     hpmStr = bs.readString()
@@ -366,7 +489,7 @@ def getVertex(vertBuffer,parentBoneMatrix):
     numVerts = len(vertBuffer) // 12
     for i in range(numVerts):
         vert = NoeVec3.fromBytes(vin.readBytes(12))
-        vert *= parentBoneMatrix
+        vert *= parentBoneMatrix        
         out.writeBytes(vert.toBytes())
     return out.getBuffer()
 
@@ -382,6 +505,18 @@ def getNormal(normalData):
         out.writeFloat(ny)
         out.writeFloat(nz)        
     return out.getBuffer()
+def getTransformNormal(normalData,parentBoneMatrix):
+    nin = NoeBitStream(normalData)
+    out = NoeBitStream()
+    numVerts = len(normalData) // 12
+    for i in range(numVerts):
+        normal = NoeVec3.fromBytes(nin.readBytes(12))
+        normal *= parentBoneMatrix
+        normal.normalize()
+        out.writeBytes(normal.toBytes())
+    return out.getBuffer()
+
+
 
 def getUV(uvdata):
     uvin = NoeBitStream(uvdata)
@@ -443,6 +578,11 @@ def readBone(bs,boneIndex):
     boneInfo = []
     subBones = []
     childMeshIDs = []
+    boneMeshOffsetList = []
+    boneMeshMatID = []
+    boneMeshParentID = []
+    boneMeshType = []
+    boneHaveSubMesh = False
     boneMatrix = NoeMat44.fromBytes(bs.readBytes(64)).toMat43()
     siblingID = bs.readShort()
     subID = bs.readShort()
@@ -451,6 +591,7 @@ def readBone(bs,boneIndex):
     bMin = bs.read('3f')
     bMax = bs.read('3f')
     dataType = bs.readInt()
+    #print("%x" %(bs.tell()))
     boneName = readHpmString(bs)
     zero = bs.readInt()
     if (dataType == 1):
@@ -458,15 +599,16 @@ def readBone(bs,boneIndex):
         childMeshIDs.append(childMeshID)
         unkNum = bs.readInt()
         if unkNum == 1:
-            unk1 = bs.readInt()
-            unk2 = bs.readInt()
+            boneHaveSubMesh = True
+            unkType = bs.readInt()
+            lightMatID = bs.readInt()
             numData = bs.readInt()
             for i in range(numData):
                 numType1 = bs.readByte()
                 numType2 = bs.readByte()
                 numType3 = bs.readByte()
                 numType4 = bs.readByte()
-                unkOfs = bs.readInt()
+                skinBoneOfs = bs.readInt()
                 offsetList = []
                 if numType1:
                     for n in range(numType1):
@@ -485,6 +627,10 @@ def readBone(bs,boneIndex):
                             bs.seek(numData*4,NOESEEK_REL)
                 if numType3:
                     bs.seek(32,NOESEEK_REL)
+                boneMeshOffsetList.append(offsetList)
+            boneMeshMatID.append(lightMatID)
+            boneMeshParentID.append(boneIndex)
+            boneMeshType.append(unkType)
     elif dataType == 3:
         unkf = bs.read('4f')
         unk1 = bs.readInt()
@@ -496,7 +642,10 @@ def readBone(bs,boneIndex):
         unk1 = bs.readInt()
         numFloat = bs.readInt()
         for f in range(numFloat):            
-            unk3f = bs.read('3f')	
+            unk3f = bs.read('3f')
+    elif dataType > 0:
+        print("unknown bone type:%d"%(dataType))
+        
     bone = NoeBone(skinBoneID, boneName, boneMatrix, None,-1)
     boneInfo.append(bone)
     subBones.append(siblingID)
@@ -504,9 +653,15 @@ def readBone(bs,boneIndex):
     boneInfo.append(subBones)
     boneInfo.append(childMeshIDs)
     boneInfo.append(skinBoneID)
+    boneInfo.append(boneHaveSubMesh)
+    if boneHaveSubMesh:
+        boneInfo.append(boneMeshOffsetList)
+        boneInfo.append(boneMeshMatID)
+        boneInfo.append(boneMeshParentID)
+        boneInfo.append(boneMeshType)
     return boneInfo
 
-def noepyLoadRGBA(data, texList):
+def tpkNoepyLoadRGBA(data, texList):
     bs = NoeBitStream(data)
     magic = bs.readInt()
     fileSize = bs.readInt()
@@ -518,6 +673,8 @@ def noepyLoadRGBA(data, texList):
         offset = bs.readInt()
         size = bs.readInt()
         texName = bs.readString()
+
+        texName = rapi.getExtensionlessName(texName.split(">")[1])
         nextOfs = bs.tell()
 
         bs.setEndian(NOE_LITTLEENDIAN)        
@@ -552,29 +709,84 @@ def noepyLoadRGBA(data, texList):
             
             
             pals = bytes()
-            for i in range(palSize // 4 ):
+            for i in range(numColors):
                 pals += rgba32(bs.readUInt())
                 
             if texType == 1:
                 textureData = rapi.imageDecodeRawPal(pixel,pals,width,height,4,"r8g8b8a8")
                 texList.append(NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
                 
-                outName = rapi.getDirForFilePath(rapi.getInputName())+ rapi.getExtensionlessName(texName[10:len(texName)]) + ".png"                
+                outName = rapi.getDirForFilePath(rapi.getInputName())+ texName + ".png"                
                 if not rapi.checkFileExists(outName):
                     noesis.saveImageRGBA(outName,NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
                     
-            elif texType == 2:
-                pixel = rapi.imageUntwiddlePS2(pixel,width,height,8)
+            elif texType == 2:                
+                pixel = rapi.imageUntwiddlePS2(pixel,width,height,8)                
                 textureData = rapi.imageDecodeRawPal(pixel,pals,width,height,8,"r8g8b8a8",noesis.DECODEFLAG_PS2SHIFT)
                 texList.append(NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
 
-                outName = rapi.getDirForFilePath(rapi.getInputName())+ rapi.getExtensionlessName(texName[10:len(texName)]) + ".png"                
+                outName = rapi.getDirForFilePath(rapi.getInputName())+ texName + ".png"                
                 if not rapi.checkFileExists(outName):
                     noesis.saveImageRGBA(outName,NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
                     
         bs.seek(nextOfs)
     return 1
+
+def sshNoepyLoadRGBA(data, texList):
+    bs = NoeBitStream(data)
+    sshMagic = bs.readInt()
+    sshFileSize = bs.readInt()
+    unk = bs.readInt()
+    unkStr = bs.readBytes(8)
+    dataOffset = bs.readInt()
+    bs.seek(dataOffset)
+    flag = bs.readInt()
+    texType = flag & 0xff
+    pixelSize = (flag >> 8) - 16
+    width = bs.readShort()
+    height = bs.readShort()
+    zero = bs.readInt()
+    unk2 = bs.readShort()
+    unk3 = bs.readShort()
+    pixel = bs.readBytes(pixelSize)
+    if texType == 1:
+        palSize = 64
+    elif texType == 2:
+        palSize = 1024
+    texName = rapi.getExtensionlessName(rapi.getInputName())
+    if texType in [1,2]:
+        palFlag = bs.readInt()
+        palWidth = bs.readShort()
+        palHeight = bs.readShort()
+        numColors = bs.readShort()
+        unk4 = bs.readShort()
+        unk5 = bs.readShort()
+        unk6 = bs.readShort()
         
+        
+        pals = bytes()
+        for i in range(numColors):
+            pals += rgba32(bs.readUInt())
+            
+        if texType == 1:
+            textureData = rapi.imageDecodeRawPal(pixel,pals,width,height,4,"r8g8b8a8")
+            texList.append(NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
+            
+            outName = rapi.getDirForFilePath(rapi.getInputName())+ texName + ".png"                
+            if not rapi.checkFileExists(outName):
+                noesis.saveImageRGBA(outName,NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
+                
+        elif texType == 2:
+            pixel = rapi.imageUntwiddlePS2(pixel,width,height,8)
+            textureData = rapi.imageDecodeRawPal(pixel,pals,width,height,8,"r8g8b8a8",noesis.DECODEFLAG_PS2SHIFT)
+            texList.append(NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
+
+            outName = rapi.getDirForFilePath(rapi.getInputName())+ texName + ".png"                
+            if not rapi.checkFileExists(outName):
+                noesis.saveImageRGBA(outName,NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
+                
+        
+    return 1
 
 def rgba32(rawPixel):
     t = bytearray(4)
