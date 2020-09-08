@@ -372,7 +372,8 @@ def hpmLoadModel(data, mdlList):
                     faceBuffer = faceDatas[v]
                     materialTexName = texNames[matID]
                     rapi.rpgSetMaterial(materialTexName)
-                    rapi.rpgSetLightmap(texNames[lightMatID])
+                    #light map only for UV2
+                    #rapi.rpgSetLightmap(texNames[lightMatID])
                     rapi.rpgCommitTriangles(faceBuffer, noesis.RPGEODATA_INT, (len(faceBuffer))//4, noesis.RPGEO_TRIANGLE, 1)
                     rapi.rpgClearBufferBinds()                    
             rapi.rpgSetName(meshNames[boneChildMeshID])    
