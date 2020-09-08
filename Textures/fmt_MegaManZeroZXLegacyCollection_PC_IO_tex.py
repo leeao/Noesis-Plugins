@@ -1,4 +1,5 @@
-
+#Mega Man Zero / ZX Legacy Collection PC .tex textures Importer / Exporter for Noesis plugin.
+#Author: Allen
 from inc_noesis import *
 '''
 Select the edited DDS, PNG or any image that NOESIS supports to open.
