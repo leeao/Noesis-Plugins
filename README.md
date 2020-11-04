@@ -1,3 +1,6 @@
+# About
+Here are some Noesis Python scripts created by my research on game models and textures.
+
 # Noesis-Plugins
 
 Noesis:
