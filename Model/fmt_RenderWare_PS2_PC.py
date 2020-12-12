@@ -303,6 +303,7 @@ class rFrameList(object):
                 self.skinBones=[]
                 self.hasAnim = 0
                 self.kickDummy = 0
+                self.hasBoneName = 0
         def rFrameListStruct(self):
                 header = rwChunk(self.bs)
                 frameCount = self.bs.readUInt()
@@ -340,6 +341,11 @@ class rFrameList(object):
                         if boneNameLen>1:
                                 boneName = self.bs.readString()
                 self.boneNameList.append(boneName)
+        def rFrameName(self,nameLength):
+                boneName = ""
+                boneNameBytes = self.bs.readBytes(nameLength);
+                boneName = str(boneNameBytes, encoding = "utf-8")
+                return boneName
         def rFrameExt(self,index):
                 header = rwChunk(self.bs)
                 endOfs = self.bs.tell() + header.chunkSize
@@ -349,9 +355,16 @@ class rFrameList(object):
                                 chunk = rwChunk(self.bs)                                
                                 if chunk.chunkID == 0x11e:
                                         self.rHAnimPLG()
+                                elif chunk.chunkID == 0x253F2FE:  
+                                        hasName = 1
+                                        self.boneNameList.append(self.rFrameName(chunk.chunkSize))
+                                        if self.hasBoneName != 1:
+                                            self.hasBoneName = 1
                                 elif chunk.chunkID == 0x11f:
                                         hasName = 1
                                         self.rUserDataPLG(index)
+                                        if self.hasBoneName != 1:
+                                            self.hasBoneName = 1
                                 else:
                                         self.bs.seek(chunk.chunkSize,1)
                 if(hasName==0):
@@ -411,7 +424,10 @@ class rFrameList(object):
                         if animBoneID in self.animBoneIDList:
                             #because rootbone at frameList id start is 1 (not include first dummy(0)).so convert to frameList ID need + 1. 0 is dummy not use.
                             arrayIndex = self.animBoneIDList.index(animBoneID) + 1  
-                            newBoneNameList[i] = "Bone" + str(animBoneID)
+                            if self.hasBoneName == 1:
+                                newBoneNameList[i] = self.boneNameList[arrayIndex]
+                            else:                            
+                                newBoneNameList[i] = "Bone" + str(animBoneID)
                             newBoneMatrixList[i] = self.boneMatList[arrayIndex]
                     bones=[]
                     for j in range(len(newAnimBoneIDList)):                
@@ -880,5 +896,4 @@ class rGeomtry(object):
                         nativeDataPLG = rNativeDataPLG(nativeDatas,matList,binMeshPLG,self.vertMat)
                         nativeDataPLG.readMesh()
                 #rapi.rpgCommitTriangles(faceBuff, noesis.RPGEODATA_USHORT, (numFace * 3), noesis.RPGEO_TRIANGLE, 1)
-                rapi.rpgClearBufferBinds()                
-
+                rapi.rpgClearBufferBinds()
