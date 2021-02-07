@@ -506,7 +506,7 @@ class rFrameList(object):
                 #通过比较每个骨骼的AnimBoneID 和 hAnimBoneIDList 里面的 AnimBoneID 是否相同. AnimBoneID需要大于>0.
                 #然后得到一个存在的AnimBoneID数组，SkinBoneID数组（未从0排序），frameListID数组（数组存储顺序ID，方便访问父级和名称，矩阵），父级骨骼ListID数组
                 #通过遍历父级骨骼ListID数组，查看是否和frameListID数组相同，然后得到父级的SkinBoneID。链接父级。
-                #根据SkinBoneID数组长度对比skinBoneID从0开始重新排序，本步骤不是必做，因为Noesis自动矫正列表。
+                #根据skinBoneID从0开始重新排序. 本步骤不是必做，因为Noesis自动矫正列表,不过还是做了。
                 if self.hasHAnim > 0: 
                     boneDataList = []
                     for i in range(len(self.animBoneIDList)):
@@ -539,14 +539,17 @@ class rFrameList(object):
                                 if boneDataList[i].listParentID == 0 :
                                     boneDataList[i].skinBoneParentID = -1
                                 
-                    bones=[]
+                    bones = [0] * len(boneDataList)
+                    #bones = []
                     for j in range(len(boneDataList)):                
                             boneIndex = boneDataList[j].skinBoneID
                             boneName =  boneDataList[j].boneName
                             boneMat = boneDataList[j].matrix
                             bonePIndex = boneDataList[j].skinBoneParentID
                             bone = NoeBone(boneIndex, boneName, boneMat, None,bonePIndex)
-                            bones.append(bone)                                
+                            #bones.append(bone)    
+                            bones[boneIndex] = bone
+
                     self.skinBones = bones                   
                 else:
                     bones = self.bones       
