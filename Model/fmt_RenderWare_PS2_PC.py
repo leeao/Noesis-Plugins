@@ -507,6 +507,11 @@ class rFrameList(object):
                 #然后得到一个存在的AnimBoneID数组，SkinBoneID数组（未从0排序），frameListID数组（数组存储顺序ID，方便访问父级和名称，矩阵），父级骨骼ListID数组
                 #通过遍历父级骨骼ListID数组，查看是否和frameListID数组相同，然后得到父级的SkinBoneID。链接父级。
                 #根据skinBoneID从0开始重新排序. 本步骤不是必做，因为Noesis自动矫正列表,不过还是做了。
+                #Programming ideas
+                #By comparing the AnimBoneID of each bone and the AnimBoneID in hAnimBoneIDList are the same. AnimBoneID needs to be greater than >0.
+                #Then get an existing AnimBoneID array, SkinBoneID array (not sorted from 0), frameListID array (array storage order ID, easy to access parent and name, matrix), parent bone ListID array
+                #By traversing the parent bone ListID array, check whether it is the same as the frameListID array, and then get the parent's SkinBoneID. Link to the parent.
+                #Re-sort from 0 according to skinBoneID. This step is not necessary, because Noesis automatically corrects the list, but it is still done.                
                 if self.hasHAnim > 0: 
                     boneDataList = []
                     for i in range(len(self.animBoneIDList)):
