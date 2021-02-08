@@ -544,17 +544,24 @@ class rFrameList(object):
                                 if boneDataList[i].listParentID == 0 :
                                     boneDataList[i].skinBoneParentID = -1
                                 
-                    bones = [0] * len(boneDataList)
-                    #bones = []
+                    #build skeleton
+                    tempBones = []
                     for j in range(len(boneDataList)):                
                             boneIndex = boneDataList[j].skinBoneID
                             boneName =  boneDataList[j].boneName
                             boneMat = boneDataList[j].matrix
                             bonePIndex = boneDataList[j].skinBoneParentID
                             bone = NoeBone(boneIndex, boneName, boneMat, None,bonePIndex)
-                            #bones.append(bone)    
-                            bones[boneIndex] = bone
+                            tempBones.append(bone)    
+                    
+                    #Re-sort from 0 according to skinBoneID.
+                    bones = []
+                    for i in range(len(boneDataList)): 
+                            for j in range(len(boneDataList)):
+                                if tempBones[j].index == i:
+                                    bones.append(tempBones[j])
 
+                    
                     self.skinBones = bones                   
                 else:
                     bones = self.bones       
