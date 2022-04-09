@@ -6,7 +6,6 @@
 # Acknowledgements:
 # http://wiki.tockdom.com - format specs
 
-
 from inc_noesis import *
 import rapi
 
@@ -201,18 +200,18 @@ class textureParser:
 
         return NoeTexture("default", width, height, textureData, noesis.NOESISTEX_RGBA32)
 
-
     @staticmethod
     def c4(buffer, width, height, paletteBuffer, pixelFormat):
-        return indexed(0x08, dataFormat, buffer, width, height, paletteBuffer, pixelFormat)
+        return textureParser.indexed(0x08, buffer, width, height, paletteBuffer, pixelFormat)
 
     @staticmethod
     def c8(buffer, width, height, paletteBuffer, pixelFormat):
-        return indexed(0x09, dataFormat, buffer, width, height, paletteBuffer, pixelFormat)
+        return textureParser.indexed(0x09, buffer, width, height, paletteBuffer, pixelFormat)
 
     @staticmethod
     def c14x2(buffer, width, height, paletteBuffer, pixelFormat):
-        return indexed(0x0A, dataFormat, buffer, width, height, paletteBuffer, pixelFormat)
+        return textureParser.indexed(0x0A, buffer, width, height, paletteBuffer, pixelFormat)
+
 
 dataFormats = {
     # code: decoder, bpp, block width, block height, bSimple, palette len

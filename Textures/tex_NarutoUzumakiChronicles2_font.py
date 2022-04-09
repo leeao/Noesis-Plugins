@@ -1,54 +1,44 @@
 ﻿#by Allen
 from inc_noesis import *
 def registerNoesisTypes():
-    handle = noesis.register("Naruto Uzumaki Chronicles 2 PS2 textures", ".decompressed")
+    handle = noesis.register("Naruto Uzumaki Chronicles 2 PS2 Font textures", ".texture")
     noesis.setHandlerTypeCheck(handle, noepyCheckType)
     noesis.setHandlerLoadRGBA(handle, noepyLoadRGBA)
     return 1
 
 def noepyCheckType(data):
     bs = NoeBitStream(data)
-    idstring = bs.readInt()
-    if idstring != 2:
-	    return 0
     return 1
 
 def noepyLoadRGBA(data, texList):
     bs = NoeBitStream(data)
-    idstring = bs.readInt()
-    mainTableOfs =bs.tell()+ bs.readInt()
-    headerDataSize = bs.readInt()
-    texInfoOfs = bs.readInt()
-    bs.seek(texInfoOfs)
+
     numTex = bs.readInt()
     numTexChunk = bs.readInt()
     bs.seek(8,1)
     bs.seek(80*numTex,1)
     bs.seek(20*numTex,1)
-
+    texPalette = bytearray(64) #4bpp font
+    
     for i in range(numTex):
-        nextOfs = bs.tell() + 32
+        nextOfs = bs.tell() + 16
         tex = Texture(bs)
         tex.readTex()
+        if i == 0:
+            bs.seek(nextOfs)
+            texPal = Texture(bs,False)
+            texPal.readTex()
+            texPalette[0:64] = texPal.pals[0:64]
+            nextOfs += 16
         
-        bs.seek(nextOfs-16)
-        texPal = Texture(bs,False)
-        texPal.readTex()
-        
-        texName = rapi.getExtensionlessName(rapi.getInputName())+"_"+str(i)
+        texName = "font_"+str(i)
         width = tex.width * 2
-        height = tex.height * 2
+        height = tex.height * 4
 
-        if texPal.chunkSize == 1024:
-            pixel = rapi.imageUntwiddlePS2(tex.pixels,width,height,8)
-            textureData = rapi.imageDecodeRawPal(pixel,texPal.pals,width,height,8,"r8g8b8a8",noesis.DECODEFLAG_PS2SHIFT)
-            texList.append(NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
-        elif texPal.chunkSize == 64:
-            #print(i," is 4bpp")
-            height *= 2
-            pixel = rapi.imageUntwiddlePS2(tex.pixels,width,height,4)
-            textureData = rapi.imageDecodeRawPal(pixel,texPal.pals,width,height,4,"r8g8b8a8"  )
-            texList.append(NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))     
+        pixel = rapi.imageUntwiddlePS2(tex.pixels,width,height,4)
+        textureData = rapi.imageDecodeRawPal(pixel,texPalette,width,height,4,"r8g8b8a8"  )
+        texList.append(NoeTexture(texName, width, height, textureData, noesis.NOESISTEX_RGBA32))
+
         bs.seek(nextOfs)
     return 1
 
