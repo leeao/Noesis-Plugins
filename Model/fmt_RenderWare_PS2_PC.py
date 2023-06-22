@@ -1,6 +1,12 @@
-#RenderWare DFF Models and TXD Textures Noesis Importer
-#RenderWare Version 3.7.0.2 (0x1C020065)
-#By Allen(Leeao)
+'''
+Hello guys!
+Regarding the script update for Mortal Kombat PS2 to add weights support and konquest support, please move here:
+https://github.com/leeao/MortalKombat
+'''
+
+# RenderWare DFF Models and TXD Textures Noesis Importer
+# RenderWare Version 3.7.0.2 (0x1C020065)
+# By Allen(Leeao)
 '''
 Support games:
     Manhunt [PC]
