@@ -14,7 +14,7 @@ Support games:
     Agent Hugo [PC]
     Silent Hill Origins [PS2]
     Shijyou Saikyou no Deshi Kenichi - Gekitou! Ragnarok Hachikengou [PS2]
-    
+
     For some RW3.7 PC games, you can try your luck ^_^.
 '''                
 from inc_noesis import *
@@ -77,7 +77,7 @@ def libraryIDUnpackVersion( libid):
 
     if(libid & 0xFFFF0000):
         return (libid>>14 & 0x3FF00) + 0x30000 |(libid>>16 & 0x3F)
-    return libid<<8 
+    return libid<<8
 
 def readRWString(bs):
     rwStrChunk = rwChunk(bs)
@@ -123,7 +123,7 @@ class rD3D8TexNative(object):
                 texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")                                            
             elif depth == 4:
                 texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 4, "r8g8b8a8")  
-        else:        
+        else:
             pixelBuffSize = self.bs.readUInt()
             pixelBuff = self.bs.readBytes(pixelBuffSize)
             if texFormat == 0x100:                  #DXT1 alpha                        
@@ -177,7 +177,7 @@ class rPS2TexNative(object):
         paletteBuffSize = paletteDataSectionSize
         texData = bytearray()
         if texFormat == 0x500:
-            if paletteBuffSize > 0:        
+            if paletteBuffSize > 0:
                 pixelBuffSize = texelDataSectionSize - 80
                 paletteBuffSize = paletteDataSectionSize - 80
                 self.bs.seek(80,NOESEEK_REL) #skip TexPixelHeader
@@ -197,13 +197,13 @@ class rPS2TexNative(object):
                 elif depth == 4:
                     pixelBuff = unswizzle4(pixelBuff, width, height)
                     texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 4, "r8g8b8a8")
-                elif depth == 32:
-                    #texData = readPS2Palette(self.bs,pixelBuffSize//4)  
-                    pixelBuff = self.bs.readBytes(pixelBuffSize)
-                    texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8p8")             
+            elif depth == 32:
+                #texData = readPS2Palette(self.bs,pixelBuffSize//4)  
+                pixelBuff = self.bs.readBytes(pixelBuffSize)
+                texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8p8")             
         ext = rwChunk(self.bs) 
         self.bs.seek(ext.chunkSize,NOESEEK_REL)                
-        if len(texData) > 0:                                              
+        if len(texData) > 0:   
             dirName = rapi.getDirForFilePath(rapi.getInputName())
             outName = dirName + texName + ".png"                
             texture = NoeTexture(texName, width, height, texData, noesis.NOESISTEX_RGBA32)
@@ -264,7 +264,7 @@ class rwCheckTxdPlatform(object):
     def checkPlatform(self):                
         texNativeHeaderStruct = rwChunk(self.bs)                
         platformId = self.bs.readInt()
-        return platformId                    
+        return platformId
 class rTex(object):
     def __init__(self,datas):
         self.bs = NoeBitStream(datas)
@@ -287,7 +287,7 @@ class rTex(object):
                     if platformID == 8 :
                         texNative = rD3D8TexNative(datas)
                     elif platformID == 3298128 : #PS2
-                        texNative = rPS2TexNative(datas)                      
+                        texNative = rPS2TexNative(datas)
                 texture = texNative.rTexture()
                 if texture != False:
                     self.texList.append(texture)
