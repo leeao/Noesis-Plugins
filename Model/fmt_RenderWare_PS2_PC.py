@@ -2,7 +2,6 @@
 Hello guys!
 Regarding the script update for Mortal Kombat PS2 to add weights support , stage and konquest support, please move here:
 https://github.com/leeao/MortalKombat
-
 fmt_RenderWare_PS2_PC.py current script has removed support for MK.
 '''
 
@@ -15,6 +14,8 @@ Support games:
     Agent Hugo [PC]
     Silent Hill Origins [PS2]
     Shijyou Saikyou no Deshi Kenichi - Gekitou! Ragnarok Hachikengou [PS2]
+    
+    For some RW3.7 PC games, you can try your luck ^_^.
 '''                
 from inc_noesis import *
 import struct
@@ -111,21 +112,33 @@ class rD3D8TexNative(object):
         compressed = (bitFlag & 0x8) >> 3
         texFormatExt = rasterFormat & 0xf000
         texFormat = rasterFormat & 0xf00
-        pixelBuffSize = self.bs.readUInt()
-        pixelBuff = self.bs.readBytes(pixelBuffSize)
-        if texFormat == 0x100:                  #DXT1 alpha                        
-                texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT1)           
-        elif texFormat == 0x200:                  #DXT1 no alpha                        
-                texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT1)
-        elif texFormat == 0x300:                #DXT3 alpha                        
-                texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT3)
-        elif texFormat == 0x500:                #32bpp                         
-                texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8a8")
-        elif texFormat == 0x600:                #24bpp                        
-                texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8p8")                        
-        else:   
-                print("unknown format: ",texFormat)
-        print("Format: ",texFormat,texName)
+        if texFormatExt > 0:
+            if texFormatExt == 0x2000:
+                palette = self.bs.readBytes(1024)                    
+            elif texFormatExt == 0x4000:
+                palette = self.bs.readBytes(64)
+            pixelBuffSize = self.bs.readUInt()
+            pixelBuff = self.bs.readBytes(pixelBuffSize)
+            if depth == 8:           
+                texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")                                            
+            elif depth == 4:
+                texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 4, "r8g8b8a8")  
+        else:        
+            pixelBuffSize = self.bs.readUInt()
+            pixelBuff = self.bs.readBytes(pixelBuffSize)
+            if texFormat == 0x100:                  #DXT1 alpha                        
+                    texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT1)           
+            elif texFormat == 0x200:                  #DXT1 no alpha                        
+                    texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT1)
+            elif texFormat == 0x300:                #DXT3 alpha                        
+                    texData = rapi.imageDecodeDXT(pixelBuff, width, height, noesis.NOESISTEX_DXT3)
+            elif texFormat == 0x500:                #32bpp                         
+                    texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8a8")
+            elif texFormat == 0x600:                #24bpp                        
+                    texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8p8")                        
+            else:   
+                    print("unknown format: ",texFormat)
+        # print("Format: ",texFormat,texName)
         texture = NoeTexture(texName, width, height, texData, noesis.NOESISTEX_RGBA32)
         dirName = rapi.getDirForFilePath(rapi.getInputName())
         outName = dirName + texName + ".png"                
@@ -160,31 +173,43 @@ class rPS2TexNative(object):
         
         texFormatExt = rasterFormat & 0xf000
         texFormat = rasterFormat & 0xf00
-        pixelBuffSize = texelDataSectionSize - 80
-        paletteBuffSize = paletteDataSectionSize - 80
-        self.bs.seek(80,NOESEEK_REL) #skip TexPixelHeader
-        pixelBuff = self.bs.readBytes(pixelBuffSize)
-        self.bs.seek(80,NOESEEK_REL) #skip TexPalleteHeader
-        if texFormatExt == 0x2000:
-                palette = readPS2Palette(self.bs,256)                     
-        elif texFormatExt == 0x4000:
-                palette = readPS2Palette(self.bs,16)                       
-                self.bs.seek((paletteBuffSize - 64),1)#skip padding
+        pixelBuffSize = texelDataSectionSize
+        paletteBuffSize = paletteDataSectionSize
+        texData = bytearray()
+        if texFormat == 0x500:
+            if paletteBuffSize > 0:        
+                pixelBuffSize = texelDataSectionSize - 80
+                paletteBuffSize = paletteDataSectionSize - 80
+                self.bs.seek(80,NOESEEK_REL) #skip TexPixelHeader
+                pixelBuff = self.bs.readBytes(pixelBuffSize)
+                self.bs.seek(80,NOESEEK_REL) #skip TexPalleteHeader
+                if texFormatExt == 0x2000:
+                        palette = readPS2Palette(self.bs,256)                     
+                elif texFormatExt == 0x4000:
+                        palette = readPS2Palette(self.bs,16)                       
+                        self.bs.seek((paletteBuffSize - 64),1)#skip padding               
+                if depth == 8:
+                    #pixelBuff = rapi.imageUntwiddlePS2(pixelBuff,width,height,8)
+                    #texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8",noesis.DECODEFLAG_PS2SHIFT)                        
+                    pixelBuff = unswizzle8(pixelBuff,width,height)
+                    palette = unswizzlePalette(palette)
+                    texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")                                            
+                elif depth == 4:
+                    pixelBuff = unswizzle4(pixelBuff, width, height)
+                    texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 4, "r8g8b8a8")
+                elif depth == 32:
+                    #texData = readPS2Palette(self.bs,pixelBuffSize//4)  
+                    pixelBuff = self.bs.readBytes(pixelBuffSize)
+                    texData = rapi.imageDecodeRaw(pixelBuff, width, height, "r8g8b8p8")             
         ext = rwChunk(self.bs) 
         self.bs.seek(ext.chunkSize,NOESEEK_REL)                
-        if depth == 8:
-            #pixelBuff = rapi.imageUntwiddlePS2(pixelBuff,width,height,8)
-            #texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8",noesis.DECODEFLAG_PS2SHIFT)                        
-            pixelBuff = unswizzle8(pixelBuff,width,height)
-            palette = unswizzlePalette(palette)
-            texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 8, "r8g8b8a8")                                            
-        elif depth == 4:
-            pixelBuff = unswizzle4(pixelBuff, width, height)
-            texData = rapi.imageDecodeRawPal(pixelBuff, palette, width, height, 4, "r8g8b8a8")                               
-        dirName = rapi.getDirForFilePath(rapi.getInputName())
-        outName = dirName + texName + ".png"                
-        texture = NoeTexture(texName, width, height, texData, noesis.NOESISTEX_RGBA32)
-        noesis.saveImageRGBA(outName,texture)
+        if len(texData) > 0:                                              
+            dirName = rapi.getDirForFilePath(rapi.getInputName())
+            outName = dirName + texName + ".png"                
+            texture = NoeTexture(texName, width, height, texData, noesis.NOESISTEX_RGBA32)
+            noesis.saveImageRGBA(outName,texture)
+        else:
+            return False            
         return texture
 def rgba32(rawPixel):
     t = bytearray(4)
@@ -231,7 +256,15 @@ def unswizzle4(buffer, width, height):
             idx2 = newPixels[i*2+1]
             idx = ((idx2 << 4) | idx1) & 0xff
             result[i] = idx        
-    return result                 
+    return result
+class rwCheckTxdPlatform(object):
+    def __init__(self,datas):
+        self.bs = NoeBitStream(datas)
+        self.platformId = 0
+    def checkPlatform(self):                
+        texNativeHeaderStruct = rwChunk(self.bs)                
+        platformId = self.bs.readInt()
+        return platformId                    
 class rTex(object):
     def __init__(self,datas):
         self.bs = NoeBitStream(datas)
@@ -241,16 +274,23 @@ class rTex(object):
         texStruct = rwChunk(self.bs)
         texCount = self.bs.readUShort()
         self.texCount = texCount
-        deviceId = self.bs.readUShort() # 1 for D3D8, 2 for D3D9, 6 for PlayStation 2, 8 for XBOX
+        deviceId = self.bs.readUShort() # 1 for D3D8, 2 for D3D9, 6 for PlayStation 2, 8 for XBOX, 9 for PSP
         for i in range(texCount):
                 texNativeHeader = rwChunk(self.bs)
                 datas = self.bs.readBytes(texNativeHeader.chunkSize)
-                if deviceId == 1:
+                platformID = rwCheckTxdPlatform(datas).checkPlatform()
+                if deviceId == 1 or deviceId == 2 :
                     texNative = rD3D8TexNative(datas)
                 elif deviceId == 6:
                     texNative = rPS2TexNative(datas)
+                elif deviceId == 0:
+                    if platformID == 8 :
+                        texNative = rD3D8TexNative(datas)
+                    elif platformID == 3298128 : #PS2
+                        texNative = rPS2TexNative(datas)                      
                 texture = texNative.rTexture()
-                self.texList.append(texture)
+                if texture != False:
+                    self.texList.append(texture)
 def rTexture(bs):
     texHeader = rwChunk(bs)
     texStructHeader = rwChunk(bs)
@@ -436,13 +476,13 @@ class rFrameList(object):
         def readTString(self):
                 outStr = ""
                 strLen = self.bs.readInt()
-                outStrBytes = self.bs.readBytes(strLen);
-                outStr = str(outStrBytes, encoding = "utf-8")
+                outStrBytes = self.bs.readBytes(strLen)
+                outStr = outStrBytes[0:-1].decode('utf-8')
                 return outStr                                
         def rUserDataPLG(self,index):
-                numSet = self.bs.readInt()
+                numDirEntry = self.bs.readInt()
                 boneName = "Bone"+str(index)
-                for i in range(numSet):
+                for i in range(numDirEntry):
                         typeName = self.readTString()
                         userDataType = self.bs.readInt()
                         numberObjects = self.bs.readInt()
@@ -512,12 +552,12 @@ class rFrameList(object):
                 return bones
         def getSkinBones(self):      
                 #编程思路
-                #通过比较每个骨骼的AnimBoneID 和 hAnimBoneIDList 里面的 AnimBoneID 是否相同. AnimBoneID需要大于>0.
+                #通过比较每个骨骼的AnimBoneID 和 hAnimBoneIDList 里面的 AnimBoneID 是否相同. AnimBoneID需要不等于-1(0xffff).
                 #然后得到一个存在的AnimBoneID数组，SkinBoneID数组（未从0排序），frameListID数组（数组存储顺序ID，方便访问父级和名称，矩阵），父级骨骼ListID数组
                 #通过遍历父级骨骼ListID数组，查看是否和frameListID数组相同，然后得到父级的SkinBoneID。链接父级。
                 #根据skinBoneID从0开始重新排序. 本步骤不是必做，因为Noesis自动矫正列表,不过还是做了。
                 #Programming ideas
-                #By comparing the AnimBoneID of each bone and the AnimBoneID in hAnimBoneIDList are the same. AnimBoneID needs to be greater than >0.
+                #By comparing the AnimBoneID of each bone and the AnimBoneID in hAnimBoneIDList are the same. AnimBoneID needs to be not equal to -1 (0xffff).
                 #Then get an existing AnimBoneID array, SkinBoneID array (not sorted from 0), frameListID array (array storage order ID, easy to access parent and name, matrix), parent bone ListID array
                 #By traversing the parent bone ListID array, check whether it is the same as the frameListID array, and then get the parent's SkinBoneID. Link to the parent.
                 #Re-sort from 0 according to skinBoneID. This step is not necessary, because Noesis automatically corrects the list, but it is still done.                
@@ -644,10 +684,7 @@ class rMatrial(object):
                 if matExtHeader.chunkSize > 0:
                     while self.bs.tell() < matExtEndOfs:
                         chunk = rwChunk(self.bs)
-                        if chunk.chunkID == 0x895303:
-                            self.rMKPS2SkinUsedBoneIDList()
-                        else:
-                            self.bs.seek(chunk.chunkSize,NOESEEK_REL)
+                        self.bs.seek(chunk.chunkSize,NOESEEK_REL)
                 '''                                                
                 return texName
 class rMaterialList(object):
@@ -720,7 +757,7 @@ class rSkin(object):
                         inverseBoneMats=[]
                         for i in range(boneCount):
                                 inverseBoneMats.append(NoeMat44.fromBytes(self.bs.readBytes(64)))                        
-                        self.bs.read('3f')
+                        #self.bs.read('3f')
 
                 else:
                         skinStruct = rwChunk(self.bs)
@@ -736,7 +773,6 @@ class rSkin(object):
                         for i in range(boneCount):
                                 inverseBoneMats.append(NoeMat44.fromBytes(self.bs.readBytes(64)))
                         #self.bs.read('7i') #for ps2 dff
-                        #self.bs.seek(16,1) #for Mortal Kombat PS2
 class rBinMeshPLG(object):
         def __init__(self,datas,matList,nativeFlag):
                 self.bs = NoeBitStream(datas)
@@ -990,6 +1026,10 @@ class rGeomtry(object):
                 vertBuff = bytes()
                 normBuff = bytes()
                 uvs = None
+
+                #spec
+                if nativeFlags == 0 and numFace > 0:
+                    Meshes = 1
                 if nativeFlags != 1:
                         if (Prelit==1):
                                 self.bs.seek(numVert*4,1)
@@ -1063,6 +1103,18 @@ class rGeomtry(object):
                 if haveBinMesh:
                         binMeshPLG = rBinMeshPLG(binMeshDatas,matList,nativeFlags)
                         binMeshPLG.readFace()
+                else:
+                    faceList = [bytes()]*len(matList)
+                    for f in range(len(faceBuff)//6):
+                        face = struct.unpack('3H',faceBuff[f*6:f*6+6])
+                        matID = MtlIDList[f]
+                        faceList[matID] += struct.pack('3H',face[0],face[1],face[2])
+                    for m in range(len(matList)):
+                        matID = m
+                        matName = self.matList[matID].name
+                        rapi.rpgSetMaterial(matName)
+                        faces = faceList[m]                        
+                        rapi.rpgCommitTriangles(faces, noesis.RPGEODATA_USHORT, len(faces)//2, noesis.RPGEO_TRIANGLE, 1)                        
                 if haveNavtiveMesh:
                         nativeDataPLG = rNativeDataPLG(nativeDatas,matList,binMeshPLG,self.vertMat)
                         nativeDataPLG.readMesh()
