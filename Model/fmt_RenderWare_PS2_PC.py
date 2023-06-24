@@ -12,9 +12,9 @@ Support games:
     Manhunt [PC]
     Agent Hugo [PC]
     Silent Hill Origins [PS2]
-    Mortal Kombat Deadly Alliance [PS2]
     Mortal Kombat Deception [PS2]
     Mortal Kombat Armageddon [PS2]
+    Shijyou Saikyou no Deshi Kenichi - Gekitou! Ragnarok Hachikengou [PS2]
 '''                
 from inc_noesis import *
 import struct
@@ -1394,19 +1394,21 @@ class rNativeDataPLG(object):
                         
                         if meshType == 0:                            
                             rapi.rpgBindBoneIndexBuffer(newSkinBoneIDs[v], noesis.RPGEODATA_UBYTE, 4, 1)
-                            rapi.rpgBindBoneWeightBuffer(newSkinWeights[v], noesis.RPGEODATA_FLOAT, 4, 1)       
-                            
-                        normalData = normalDatas[v]                        
-                        normalData = getTransformNormal(normalData,self.vertMat)
-                        rapi.rpgBindNormalBuffer(normalData, noesis.RPGEODATA_FLOAT, 12)
+                            rapi.rpgBindBoneWeightBuffer(newSkinWeights[v], noesis.RPGEODATA_FLOAT, 4, 1)  
 
-                        UVData = UVDatas[v]
-                        checkLODUV = noeUnpack("I",UVData[0:4])[0]                    
-                        if checkLODUV != 0xE5E5E5E5:
-                            rapi.rpgBindUV1Buffer(UVData, noesis.RPGEODATA_FLOAT, 8)                    
+                        if len(normalDatas):
+                            normalData = normalDatas[v]                        
+                            normalData = getTransformNormal(normalData,self.vertMat)
+                            rapi.rpgBindNormalBuffer(normalData, noesis.RPGEODATA_FLOAT, 12)
+                        if len(UVDatas):
+                            UVData = UVDatas[v]
+                            checkLODUV = noeUnpack("I",UVData[0:4])[0]                    
+                            if checkLODUV != 0xE5E5E5E5:
+                                rapi.rpgBindUV1Buffer(UVData, noesis.RPGEODATA_FLOAT, 8)                    
 
-                        colorData = colorDatas[v]                
-                        rapi.rpgBindColorBuffer(colorData, noesis.RPGEODATA_UBYTE, 4, 4)
+                        if len(colorDatas):
+                            colorData = colorDatas[v]                
+                            rapi.rpgBindColorBuffer(colorData, noesis.RPGEODATA_UBYTE, 4, 4)
                                              
                         matID = self.matIdList[i]
                         matName = self.matList[matID].name
