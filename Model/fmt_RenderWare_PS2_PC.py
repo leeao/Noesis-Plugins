@@ -14,8 +14,8 @@ Support games:
     Agent Hugo [PC]
     Silent Hill Origins [PS2]
     Shijyou Saikyou no Deshi Kenichi - Gekitou! Ragnarok Hachikengou [PS2]
-
-    For some RW3.7 PC games, you can try your luck ^_^.
+    Rurouni Kenshin [PS2]
+    For some RW3.7 PC / PS2 games, you can try your luck ^_^.
 '''                
 from inc_noesis import *
 import struct
@@ -863,13 +863,13 @@ class rNativeDataPLG(object):
                             temp[12] = 0                                   
                             weight1,weight2,weight3,weight4 = noeUnpack('4f',temp)
                             if weight1 > 0:
-                                boneID1 -= 1
+                                if not boneID1 == 0: boneID1 -= 1
                             if weight2 > 0:
-                                boneID2 -= 1
+                                if not boneID2 == 0:boneID2 -= 1
                             if weight3 > 0:
-                                boneID3 -= 1
+                                if not boneID3 == 0:boneID3 -= 1
                             if weight4 > 0:
-                                boneID4 -= 1                                
+                                if not boneID4 == 0:boneID4 -= 1
                             skinBoneIDs.append((boneID1,boneID2,boneID3,boneID4))
                             skinWeights.append((weight1,weight2,weight3,weight4))
                     paddingLength = endOfs - self.bs.tell()
