@@ -853,23 +853,41 @@ class rNativeDataPLG(object):
                             temp = bytearray(16)
                             for t in range(16):
                                 temp[t] = self.bs.readUByte()                            
-                            boneID1 = noeUnpack('B',temp[0:1])[0] // 4
-                            boneID2 = noeUnpack('B',temp[4:5])[0] // 4
-                            boneID3 = noeUnpack('B',temp[8:9])[0] // 4
-                            boneID4 = noeUnpack('B',temp[12:13])[0] // 4                            
+                            boneID1 = noeUnpack('B',temp[0:1])[0] # // 4
+                            boneID2 = noeUnpack('B',temp[4:5])[0] # // 4
+                            boneID3 = noeUnpack('B',temp[8:9])[0] # // 4
+                            boneID4 = noeUnpack('B',temp[12:13])[0] # // 4
                             temp[0] = 0
                             temp[4] = 0
                             temp[8] = 0
                             temp[12] = 0                                   
                             weight1,weight2,weight3,weight4 = noeUnpack('4f',temp)
-                            if weight1 > 0:
-                                if not boneID1 == 0: boneID1 -= 1
-                            if weight2 > 0:
-                                if not boneID2 == 0:boneID2 -= 1
-                            if weight3 > 0:
-                                if not boneID3 == 0:boneID3 -= 1
-                            if weight4 > 0:
-                                if not boneID4 == 0:boneID4 -= 1
+                            if (not len(normalDatas)) and (not len(UVDatas)) and (not len(colorDatas)):
+                                if weight1 > 0:
+                                    boneID1 = boneID1 // 3
+                                    boneID1 -= 1
+                                if weight2 > 0:
+                                    boneID2 = boneID2 // 3
+                                    boneID2 -= 1
+                                if weight3 > 0:
+                                    boneID3 = boneID3 // 3
+                                    boneID3 -= 1
+                                if weight4 > 0:
+                                    boneID4 = boneID4 // 3
+                                    boneID4 -= 1 
+                            else:
+                                if weight1 > 0:
+                                    boneID1 = boneID1 // 4
+                                    boneID1 -= 1
+                                if weight2 > 0:
+                                    boneID2 = boneID2 // 4
+                                    boneID2 -= 1
+                                if weight3 > 0:
+                                    boneID3 = boneID3 // 4
+                                    boneID3 -= 1
+                                if weight4 > 0:
+                                    boneID4 = boneID4 // 4
+                                    boneID4 -= 1 
                             skinBoneIDs.append((boneID1,boneID2,boneID3,boneID4))
                             skinWeights.append((weight1,weight2,weight3,weight4))
                     paddingLength = endOfs - self.bs.tell()
