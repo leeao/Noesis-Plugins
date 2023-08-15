@@ -2,7 +2,7 @@
 
 '''
 Support games:
-    Big Kahuna Reef 1
+	Big Kahuna Reef 1
 	Big Kahuna Reef 2
 	Big Kahuna Reef 3
 	Big Kahuna Words
@@ -13,7 +13,7 @@ Support games:
 	Ricochet HD PS3
 	Ricochet Infinity
 	Ricochet Lost Worlds
-    Ricochet Recharged
+	Ricochet Recharged
 	Ricochet Xtreme
 	Swarm Gold
 	Wik
