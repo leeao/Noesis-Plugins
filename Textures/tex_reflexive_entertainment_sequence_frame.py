@@ -2,9 +2,21 @@
 
 '''
 Support games:
-    Ricochet Infinity PC
-    Ricochet Xtreme PC
-    Ricochet HD PS3
+    Big Kahuna Reef 1
+	Big Kahuna Reef 2
+	Big Kahuna Reef 3
+	Big Kahuna Words
+	Build in time
+	Costume Chaos
+	Monarch
+	Mosaic
+	Ricochet HD PS3
+	Ricochet Infinity
+	Ricochet Lost Worlds
+    Ricochet Recharged
+	Ricochet Xtreme
+	Swarm Gold
+	Wik
 '''
 
 from inc_noesis import *
@@ -42,6 +54,31 @@ def noepyLoadRGBA(data, texList):
             outFname = path + name + ".txt"
             outFile(infoData,outFname)
             txt = open(outFname,"r")
+            CSequenceOffset = getBlockDataOffset(txt,"CSequence")
+            ddsFormat = 0
+            useDDS = -1
+            usdRaw32 = -1
+            if CSequenceOffset != -1:
+                header = dict()
+                readBlockParameter(txt, CSequenceOffset, header)            
+                if 'DDS' in header: ddsFormat = int(header.get('DDS'))
+                else:
+                    useDDS = getBlockDataOffset(txt,"DDS=1")
+                    if useDDS == -1:
+                        useRaw32 = getBlockDataOffset(txt,"DDS=0")
+                    else:
+                        ddsFormat = 1
+            
+            if ddsFormat == 0:
+                format = bs.readByte()
+                if format == 1:
+                    dataSize = bs.readUInt()
+                    rgbadata = bs.readBytes(dataSize)
+                    width = bs.readInt()
+                    height = bs.readInt()
+                    tex = NoeTexture(name, width, height, rgbadata, noesis.NOESISTEX_RGBA32)
+                    texList.append(tex)
+            
             CSequenceFrameInfoListOffset =  getBlockDataOffset(txt,"CSequenceFrameInfoList")
             if CSequenceFrameInfoListOffset != -1:
                 FrameInfosArrayOffset = getBlockDataOffset(txt,"Frame Infos=Array")
@@ -55,16 +92,50 @@ def noepyLoadRGBA(data, texList):
                         for i in range(count):
                             offset = txt.tell()
                             data = dict()
-                            readBlockParameter(txt, offset, data)
-                            left = int(data.get('Left'))
-                            right = int(data.get('Right'))
-                            top = int(data.get('Top'))
-                            bottom = int(data.get('Bottom'))
-                            width = right - left
-                            height = bottom - top
-                            dxt5Data = bs.readBytes(width * height)                           
-                            tex = NoeTexture(name+str(i), width, height, dxt5Data, noesis.NOESISTEX_DXT5)
+                            t = txt.readline().strip().split('=')
+                            if (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
+                                readBlockParameter(txt, offset, data)
+                                if 'Left' in data: left = int(data.get('Left')) 
+                                else: left = 0
+                                right = int(data.get('Right'))
+                                if 'Top' in data: top = int(data.get('Top'))
+                                else: top = 0
+                                bottom = int(data.get('Bottom'))
+                                width = right - left
+                                height = bottom - top
+                                if ddsFormat:
+                                    storageWidth = getDxtStorageSize(width)
+                                    storageHeight = getDxtStorageSize(height)
+                                    dxtData = bs.readBytes(storageWidth * storageHeight)
+                                    tex = NoeTexture(name+str(i), width, height, dxtData, noesis.NOESISTEX_DXT5)
+                                    texList.append(tex)
+                                else:
+                                    tex = crop32(texList[0].pixelData, name+str(i),texList[0].width, texList[0].height, left, right, top, bottom)
+                                    texList.append(tex) 
+                    # single frame
+                    elif (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
+                        offset = txt.tell()
+                        data = dict()                        
+                        readBlockParameter(txt, offset, data)
+                        if 'Left' in data: left = int(data.get('Left')) 
+                        else: left = 0
+                        right = int(data.get('Right'))
+                        if 'Top' in data: top = int(data.get('Top'))
+                        else: top = 0
+                        bottom = int(data.get('Bottom'))
+                        width = right - left
+                        height = bottom - top
+                        if ddsFormat:
+                            storageWidth = getDxtStorageSize(width)
+                            storageHeight = getDxtStorageSize(height)
+                            dxtData = bs.readBytes(storageWidth * storageHeight)
+                            tex = NoeTexture(name, width, height, dxtData, noesis.NOESISTEX_DXT5)
                             texList.append(tex)
+                        else:
+                            if texList[0].width != (right - left) or texList[0].height != (bottom - top):   
+                                texture = crop32(texList[0].pixelData, name,texList[0].width, texList[0].height, left, right, top, bottom)
+                                texList.append(texture)
+                                noesis.saveImageRGBA(path + name + "_crop" + ".tga", texture)
             txt.close()     
         # PC       
         else:
@@ -88,19 +159,43 @@ def noepyLoadRGBA(data, texList):
                     txt.seek(FrameInfosArrayOffset)
                     txt.readline()
                     t = txt.readline().strip().split('=')
-                    
+                    # multi frame
                     if (t[0] == "Item Count"):
                         count = int(t[1])
                         for i in range(count):
                             offset = txt.tell()
                             data = dict()
+                            t = txt.readline().strip().split('=')
+                            if (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
+                                readBlockParameter(txt, offset, data)
+                                if 'Left' in data: left = int(data.get('Left')) 
+                                else: left = 0
+                                if 'Right' in data: right = int(data.get('Right'))
+                                else: right = texList[0].width
+                                if 'Top' in data: top = int(data.get('Top'))
+                                else: top = 0
+                                if 'Bottom' in data: bottom = int(data.get('Bottom'))
+                                else: bottom = texList[0].height                         
+                                tex = crop32(texList[0].pixelData, name+str(i),texList[0].width, texList[0].height, left, right, top, bottom)
+                                texList.append(tex)
+                    # single frame
+                    elif (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
+                            offset = txt.tell()
+                            data = dict()
                             readBlockParameter(txt, offset, data)
-                            left = int(data.get('Left'))
-                            right = int(data.get('Right'))
-                            top = int(data.get('Top'))
-                            bottom = int(data.get('Bottom'))                            
-                            tex = crop32(texList[0].pixelData, name+str(i),texList[0].width, texList[0].height, left, right, top, bottom)
-                            texList.append(tex)
+                            if 'Left' in data: left = int(data.get('Left')) 
+                            else: left = 0
+                            if 'Right' in data: right = int(data.get('Right'))
+                            else: right = texList[0].width
+                            if 'Top' in data: top = int(data.get('Top'))
+                            else: top = 0
+                            if 'Bottom' in data: bottom = int(data.get('Bottom'))
+                            else: bottom = texList[0].height
+                            #if left != None and right != None and top != None and bottom != None:
+                            if texList[0].width != (right - left) or texList[0].height != (bottom - top):                            
+                                texture = crop32(texList[0].pixelData, name+str(i),texList[0].width, texList[0].height, left, right, top, bottom)
+                                texList.append(texture)
+                                noesis.saveImageRGBA(path + name + "_crop" + ".tga", texture)                     
             txt.close()
 
 
@@ -130,10 +225,8 @@ def readTex(bs, outName, path, texList):
         outFile(jpgDatas,path + outName + ".jpg")
 
         unzlibDatas = decompressZlibRes(bs)
-        # outFile(unzlibDatas,path + outName + ".alpha")
 
         tex = noesis.loadImageRGBA(path + outName + ".jpg")
-        # texList.append(tex)
 
         decodeData = unzlibDatas
         rgbaData = rapi.imageGetTexRGBA(tex)
@@ -162,7 +255,6 @@ def readTex(bs, outName, path, texList):
             unzlibDatas = decompressZlibRes(bs)
             width = bs.readInt()
             height = bs.readInt()
-            # outFile(unzlibDatas,path + outName + ".decmp")
             decodeData = unzlibDatas
             numPixels = len(decodeData) // 4
             for i in range(1,numPixels):
@@ -188,9 +280,7 @@ def readTex(bs, outName, path, texList):
                 t2 = decodeData[i - 1 + numPixels * 3]
                 t1 += t2
                 tbytes = struct.pack("H",t1)
-                decodeData[i + numPixels * 3] = tbytes[0]                                                  
-            # outFile(decodeData,path + outName + ".decmp2")
-
+                decodeData[i + numPixels * 3] = tbytes[0]
             
             rgbaData = bytearray(width*height*4)       
             for i in range(len(rgbaData)//4):
@@ -212,6 +302,13 @@ def readTex(bs, outName, path, texList):
             texList.append(texture)
             noesis.saveImageRGBA(path + outName + ".tga", texture)
 
+def getDxtStorageSize(value):
+    outValue = value
+    if (value % 4) > 0:
+        outValue = value + 4 - (value % 4)
+    return outValue
+
+
 def crop32(rgbadata, outName, width, height, left, right, top, bottom):
     cropWidth = right - left
     cropHeight = bottom - top
@@ -226,8 +323,10 @@ def crop32(rgbadata, outName, width, height, left, right, top, bottom):
 
 
 def getBlockDataOffset(txt:TextIOWrapper, blockName:str):  
+    txt.seek(0,SEEK_END)
+    fileSize = txt.tell()
     txt.seek(0) 
-    while(1):
+    while(txt.tell() < fileSize):
         text = txt.readline().strip() 
         if text == blockName:
             return txt.tell()                         
