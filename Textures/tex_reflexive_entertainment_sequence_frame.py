@@ -5,6 +5,7 @@ Support games:
     Big Kahuna Reef 1
     Big Kahuna Reef 2
     Big Kahuna Reef 3
+    Big Kahuna Party
     Big Kahuna Words
     Build in time
     Costume Chaos
@@ -12,6 +13,7 @@ Support games:
     Mosaic
     Ricochet HD PS3
     Ricochet Infinity
+    Ricochet Infinity IOS
     Ricochet Lost Worlds
     Ricochet Recharged
     Ricochet Xtreme
@@ -53,6 +55,9 @@ def noepyLoadRGBA(data, texList):
             infoData = bs.readBytes(infoSize)
             outFname = path + name + ".txt"
             outFile(infoData,outFname)
+            if bs.tell() >= bs.getSize():
+                print("No bitmap.")        
+                return 0            
             txt = open(outFname,"r")
             CSequenceOffset = getBlockDataOffset(txt,"CSequence")
             ddsFormat = 0
@@ -89,6 +94,27 @@ def noepyLoadRGBA(data, texList):
                     
                     if (t[0] == "Item Count"):
                         count = int(t[1])
+                        arrayOffset = txt.tell()                                                
+                        UpperLeftXOffsets = []
+                        UpperLeftYOffsets = []
+
+                        for i in range(count):
+                            offset = txt.tell()
+                            data = dict()
+                            t = txt.readline().strip().split('=')
+                            if (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
+                                readBlockParameter(txt, offset, data)
+                                if 'UpperLeftXOffset' in data:
+                                    UpperLeftXOffset = int(data['UpperLeftXOffset'])
+                                    UpperLeftXOffsets.append(UpperLeftXOffset)
+                                if 'UpperLeftYOffset' in data:
+                                    UpperLeftYOffset = int(data['UpperLeftYOffset'])
+                                    UpperLeftYOffsets.append(UpperLeftYOffset)
+                                # print(UpperLeftXOffset,UpperLeftYOffset)
+                        baseXOffset = min(UpperLeftXOffsets)
+                        baseYOffset = min(UpperLeftYOffsets)
+                        # print("base:",baseXOffset,baseYOffset)
+                        txt.seek(arrayOffset)
                         for i in range(count):
                             offset = txt.tell()
                             data = dict()
@@ -107,11 +133,44 @@ def noepyLoadRGBA(data, texList):
                                     storageWidth = getDxtStorageSize(width)
                                     storageHeight = getDxtStorageSize(height)
                                     dxtData = bs.readBytes(storageWidth * storageHeight)
-                                    tex = NoeTexture(name+str(i), width, height, dxtData, noesis.NOESISTEX_DXT5)
-                                    texList.append(tex)
+                                    rgbaData = rapi.imageDecodeDXT(dxtData, storageWidth, storageHeight, noesis.NOESISTEX_DXT5)
+                                    tex = crop32(rgbaData, name+str(i), storageWidth, storageHeight, 0, width, 0, height)
+                                    # tex = NoeTexture(name+str(i), width, height, dxtData, noesis.NOESISTEX_DXT5)
+                                    # texList.append(tex)
+                                    xOffset = 0
+                                    yOffset = 0
+                                    if 'UpperLeftXOffset' in data:
+                                        UpperLeftXOffset = int(data['UpperLeftXOffset'])
+                                        xOffset = UpperLeftXOffset - baseXOffset
+                                    if 'UpperLeftYOffset' in data:
+                                        UpperLeftYOffset = int(data['UpperLeftYOffset'])
+                                        yOffset = UpperLeftYOffset - baseYOffset
+                                    # print("x y offset:",xOffset,yOffset)
+                                    if xOffset != 0 or yOffset != 0:                                    
+                                        padRgbaData =  paddingPixel32(tex.pixelData, xOffset, yOffset, tex.width, tex.height)
+                                        tex = NoeTexture(name+str(i), xOffset + tex.width, yOffset + tex.height, padRgbaData, noesis.NOESISTEX_RGBA32)
+                                        texList.append(tex)
+                                    else:
+                                        texList.append(tex)                                    
                                 else:
                                     tex = crop32(texList[0].pixelData, name+str(i),texList[0].width, texList[0].height, left, right, top, bottom)
-                                    texList.append(tex) 
+                                    # texList.append(tex)
+                                    xOffset = 0
+                                    yOffset = 0
+                                    if 'UpperLeftXOffset' in data:
+                                        UpperLeftXOffset = int(data['UpperLeftXOffset'])
+                                        xOffset = UpperLeftXOffset - baseXOffset
+                                    if 'UpperLeftYOffset' in data:
+                                        UpperLeftYOffset = int(data['UpperLeftYOffset'])
+                                        yOffset = UpperLeftYOffset - baseYOffset
+                                    # print("x y offset:",xOffset,yOffset)
+                                    if xOffset != 0 or yOffset != 0:                                    
+                                        padRgbaData =  paddingPixel32(tex.pixelData, xOffset, yOffset, tex.width, tex.height)
+                                        tex = NoeTexture(name+str(i), xOffset + tex.width, yOffset + tex.height, padRgbaData, noesis.NOESISTEX_RGBA32)
+                                        texList.append(tex)
+                                    else:
+                                        texList.append(tex)                                    
+                                    
                     # single frame
                     elif (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
                         offset = txt.tell()
@@ -146,9 +205,11 @@ def noepyLoadRGBA(data, texList):
                 u1,u2,u3 = struct.unpack('3I',bs.readBytes(12))
 
             headerData = decompressZlibRes(bs)
-            outFname = path + name + ".txt"
-
+            outFname = path + name + ".txt"            
             outFile(headerData,outFname)
+            if bs.tell() >= bs.getSize():
+                print("No bitmap.")        
+                return 0
             readTex(bs,name,path,texList)
 
             txt = open(outFname,"r")
@@ -162,6 +223,27 @@ def noepyLoadRGBA(data, texList):
                     # multi frame
                     if (t[0] == "Item Count"):
                         count = int(t[1])
+                        arrayOffset = txt.tell()                                                
+                        UpperLeftXOffsets = []
+                        UpperLeftYOffsets = []
+
+                        for i in range(count):
+                            offset = txt.tell()
+                            data = dict()
+                            t = txt.readline().strip().split('=')
+                            if (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
+                                readBlockParameter(txt, offset, data)
+                                if 'UpperLeftXOffset' in data:
+                                    UpperLeftXOffset = int(data['UpperLeftXOffset'])
+                                    UpperLeftXOffsets.append(UpperLeftXOffset)
+                                if 'UpperLeftYOffset' in data:
+                                    UpperLeftYOffset = int(data['UpperLeftYOffset'])
+                                    UpperLeftYOffsets.append(UpperLeftYOffset)
+                                # print(UpperLeftXOffset,UpperLeftYOffset)
+                        baseXOffset = min(UpperLeftXOffsets)
+                        baseYOffset = min(UpperLeftYOffsets)
+                        # print("base:",baseXOffset,baseYOffset)                  
+                        txt.seek(arrayOffset)
                         for i in range(count):
                             offset = txt.tell()
                             data = dict()
@@ -177,7 +259,21 @@ def noepyLoadRGBA(data, texList):
                                 if 'Bottom' in data: bottom = int(data.get('Bottom'))
                                 else: bottom = texList[0].height                         
                                 tex = crop32(texList[0].pixelData, name+str(i),texList[0].width, texList[0].height, left, right, top, bottom)
-                                texList.append(tex)
+                                xOffset = 0
+                                yOffset = 0
+                                if 'UpperLeftXOffset' in data:
+                                    UpperLeftXOffset = int(data['UpperLeftXOffset'])
+                                    xOffset = UpperLeftXOffset - baseXOffset
+                                if 'UpperLeftYOffset' in data:
+                                    UpperLeftYOffset = int(data['UpperLeftYOffset'])
+                                    yOffset = UpperLeftYOffset - baseYOffset
+                                # print("x y offset:",xOffset,yOffset)
+                                if xOffset != 0 or yOffset != 0:                                    
+                                    padRgbaData =  paddingPixel32(tex.pixelData, xOffset, yOffset, tex.width, tex.height)
+                                    tex = NoeTexture(name+str(i), xOffset + tex.width, yOffset + tex.height, padRgbaData, noesis.NOESISTEX_RGBA32)
+                                    texList.append(tex)
+                                else:
+                                    texList.append(tex)
                     # single frame
                     elif (t[0] == "Frame Info") and (t[1] =="CFrameInfo"):
                             offset = txt.tell()
@@ -191,7 +287,6 @@ def noepyLoadRGBA(data, texList):
                             else: top = 0
                             if 'Bottom' in data: bottom = int(data.get('Bottom'))
                             else: bottom = texList[0].height
-                            #if left != None and right != None and top != None and bottom != None:
                             if texList[0].width != (right - left) or texList[0].height != (bottom - top):                            
                                 texture = crop32(texList[0].pixelData, name+str(i),texList[0].width, texList[0].height, left, right, top, bottom)
                                 texList.append(texture)
@@ -320,6 +415,20 @@ def crop32(rgbadata, outName, width, height, left, right, top, bottom):
         baseOfs = y * lineSize + left * 4
         outRgbaBuffer += rgbadata[baseOfs : baseOfs + cropLineSize]
     return  NoeTexture(outName, cropWidth, cropHeight, outRgbaBuffer, noesis.NOESISTEX_RGBA32)
+
+def paddingPixel32(rgbaData, xOffset, yOffset, srcWidth, srcHeight):
+    padWidth = xOffset + srcWidth
+    padHeight = yOffset + srcHeight
+    outBuffer = bytes()
+    if yOffset:
+        for y in range(yOffset):            
+            outBuffer += bytearray(padWidth * 4)
+    for y in range(yOffset, padHeight):
+        if xOffset:
+            outBuffer += bytearray(xOffset * 4)
+        lineSize = srcWidth * 4
+        outBuffer += rgbaData[(y - yOffset) * lineSize:(y - yOffset + 1)*lineSize]
+    return outBuffer
 
 
 def getBlockDataOffset(txt:TextIOWrapper, blockName:str):  
